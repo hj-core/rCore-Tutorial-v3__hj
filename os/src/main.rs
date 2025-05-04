@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 
+mod console;
 mod lang_items;
 mod sbi;
 
@@ -11,7 +12,11 @@ global_asm!(include_str!("entry.asm"));
 #[unsafe(no_mangle)]
 pub fn rust_main() -> ! {
     clear_bss();
-    sbi::console_putchar('H' as usize);
+    let pronouns = "Everybody";
+    print!("Hello World, {pronouns}!");
+    println!();
+    print!("Rpeat, ");
+    println!("Hello World, {}, {}!!", pronouns, pronouns);
     sbi::shutdown(false)
 }
 
