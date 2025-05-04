@@ -12,7 +12,7 @@ global_asm!(include_str!("entry.asm"));
 pub fn rust_main() -> ! {
     clear_bss();
     sbi::console_putchar('H' as usize);
-    loop {}
+    sbi::shutdown(false)
 }
 
 fn clear_bss() {
