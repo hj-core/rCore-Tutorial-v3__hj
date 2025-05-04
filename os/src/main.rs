@@ -17,7 +17,7 @@ pub fn rust_main() -> ! {
     println!();
     print!("Rpeat, ");
     println!("Hello World, {}, {}!!", pronouns, pronouns);
-    sbi::shutdown(false)
+    panic!("Shutdown machine!");
 }
 
 fn clear_bss() {
