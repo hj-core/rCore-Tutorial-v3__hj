@@ -1,3 +1,5 @@
+pub mod log;
+
 use core::fmt::{self, Write};
 
 use crate::sbi;
