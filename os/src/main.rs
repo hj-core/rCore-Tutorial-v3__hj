@@ -2,6 +2,7 @@
 #![no_main]
 
 mod lang_items;
+mod sbi;
 
 use core::arch::global_asm;
 
@@ -10,6 +11,7 @@ global_asm!(include_str!("entry.asm"));
 #[unsafe(no_mangle)]
 pub fn rust_main() -> ! {
     clear_bss();
+    sbi::console_putchar('H' as usize);
     loop {}
 }
 
