@@ -20,11 +20,11 @@ pub fn rust_main() -> ! {
     print!("Rpeat, ");
     println!("Hello World, {}, {}!!", pronouns, pronouns);
     log!(log::Level::NONE, "This is a {} message", "NONE");
-    log!(log::Level::ERROR, "This is a {} message", "ERROR");
-    log!(log::Level::WARN, "This is a {} message", "WARN");
-    log!(log::Level::INFO, "This is a {} message", "INFO");
-    log!(log::Level::DEBUG, "This is a {} message", "DEBUG");
-    log!(log::Level::TRACE, "This is a {} message", "TRACE");
+    error!("This is a {} message", "ERROR");
+    warn!("This is a {} message", "WARN");
+    info!("This is a {} message", "INFO");
+    debug!("This is a {} message", "DEBUG");
+    trace!("This is a {} message", "TRACE");
     panic!("Shutdown machine!");
 }
 

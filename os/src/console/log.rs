@@ -45,3 +45,38 @@ macro_rules! log {
         );
     };
 }
+
+#[macro_export]
+macro_rules! error {
+    ($fmt:literal $(, $($arg:tt)+)?) => {
+        log!($crate::console::log::Level::ERROR, $fmt $(, $($arg)+)?);
+    };
+}
+
+#[macro_export]
+macro_rules! warn {
+    ($fmt:literal $(, $($arg:tt)+)?) => {
+        log!($crate::console::log::Level::WARN, $fmt $(, $($arg)+)?);
+    };
+}
+
+#[macro_export]
+macro_rules! info {
+    ($fmt:literal $(, $($arg:tt)+)?) => {
+       log!($crate::console::log::Level::INFO, $fmt $(, $($arg)+)?);
+    };
+}
+
+#[macro_export]
+macro_rules! debug {
+    ($fmt:literal $(, $($arg:tt)+)?) => {
+        log!($crate::console::log::Level::DEBUG, $fmt $(, $($arg)+)?);
+    };
+}
+
+#[macro_export]
+macro_rules! trace {
+    ($fmt:literal $(, $($arg:tt)+)?) => {
+        log!($crate::console::log::Level::TRACE, $fmt $(, $($arg)+)?);
+    };
+}
