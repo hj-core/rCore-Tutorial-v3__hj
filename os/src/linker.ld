@@ -30,8 +30,9 @@ SECTIONS
 
     . = ALIGN(4K);
     data_end = .;
-    bss_start = .;
     .bss : {
+        *(.bss.stack)
+        bss_start = .;
         *(.bss .bss.*)
         *(.sbss .sbss.*)
     }
