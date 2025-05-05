@@ -1,17 +1,17 @@
 #![no_std]
 
-use syscall::sys_write;
-
 mod lang_items;
 mod syscall;
+
+use syscall::{sys_exit, sys_write};
 
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".text.entry")]
 pub extern "C" fn _start() -> ! {
     clear_bas();
     write(1, "Hello World!\n".as_bytes());
-    unsafe { main() };
-    panic!()
+    unsafe { sys_exit(main()) };
+    unreachable!()
 }
 
 fn clear_bas() {
@@ -30,4 +30,8 @@ unsafe extern "Rust" {
 
 pub fn write(fd: usize, buf: &[u8]) -> isize {
     sys_write(fd, buf)
+}
+
+pub fn exit(exit_code: i32) -> isize {
+    sys_exit(exit_code)
 }
