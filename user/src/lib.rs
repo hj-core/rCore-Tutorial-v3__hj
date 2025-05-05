@@ -10,8 +10,6 @@ use syscall::{sys_exit, sys_write};
 #[unsafe(link_section = ".text.entry")]
 pub extern "C" fn _start() -> ! {
     clear_bas();
-    println!("{} cleared.", "BSS");
-    print!("Hello, world!, {}!\n", "Rust");
     unsafe { sys_exit(main()) };
     unreachable!()
 }
