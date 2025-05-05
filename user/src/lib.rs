@@ -1,5 +1,6 @@
 #![no_std]
 
+mod console;
 mod lang_items;
 mod syscall;
 
@@ -9,7 +10,8 @@ use syscall::{sys_exit, sys_write};
 #[unsafe(link_section = ".text.entry")]
 pub extern "C" fn _start() -> ! {
     clear_bas();
-    write(1, "Hello World!\n".as_bytes());
+    println!("{} cleared.", "BSS");
+    print!("Hello, world!, {}!\n", "Rust");
     unsafe { sys_exit(main()) };
     unreachable!()
 }
