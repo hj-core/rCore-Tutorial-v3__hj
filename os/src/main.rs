@@ -16,6 +16,7 @@ pub fn rust_main() -> ! {
     clear_bss();
     print!("{} {} cleared\n", "[   OS] ", "bss");
 
+    log::init();
     log_kernel_layout();
 
     println!("{} Hello world, {}!", "[   OS] ", "everybody");

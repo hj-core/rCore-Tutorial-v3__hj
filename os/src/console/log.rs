@@ -2,6 +2,32 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 
 static MAX_LEVEL_ORDINAL: AtomicUsize = AtomicUsize::new(Level::INFO as usize);
 
+pub fn init() {
+    let max_level = get_env_log_level().unwrap_or(Level::INFO);
+    MAX_LEVEL_ORDINAL.store(max_level as usize, Ordering::Relaxed);
+}
+
+fn get_env_log_level() -> Option<Level> {
+    let env_setting = option_env!("LOG")?;
+
+    let level = if env_setting.eq_ignore_ascii_case("none") {
+        Level::NONE
+    } else if env_setting.eq_ignore_ascii_case("error") {
+        Level::ERROR
+    } else if env_setting.eq_ignore_ascii_case("warn") {
+        Level::WARN
+    } else if env_setting.eq_ignore_ascii_case("info") {
+        Level::INFO
+    } else if env_setting.eq_ignore_ascii_case("debug") {
+        Level::DEBUG
+    } else if env_setting.eq_ignore_ascii_case("trace") {
+        Level::TRACE
+    } else {
+        Level::INFO
+    };
+    Some(level)
+}
+
 pub fn should_log(level: Level) -> bool {
     if matches!(level, Level::NONE) {
         return false;
