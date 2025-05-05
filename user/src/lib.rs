@@ -1,6 +1,6 @@
 #![no_std]
 
-mod console;
+pub mod console;
 mod lang_items;
 mod syscall;
 
