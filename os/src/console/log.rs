@@ -1,3 +1,14 @@
+use core::sync::atomic::{AtomicUsize, Ordering};
+
+static MAX_LEVEL_ORDINAL: AtomicUsize = AtomicUsize::new(Level::INFO as usize);
+
+pub fn should_log(level: Level) -> bool {
+    if matches!(level, Level::NONE) {
+        return false;
+    }
+    level as usize <= MAX_LEVEL_ORDINAL.load(Ordering::Relaxed)
+}
+
 #[derive(Clone, Copy)]
 pub enum Level {
     NONE,
@@ -36,13 +47,15 @@ impl Level {
 macro_rules! log {
     ($level:expr, $fmt:literal $(, $($arg:tt)+)?) => {
         let level = $level as $crate::console::log::Level;
-        let color_code = level.get_color_code();
-        let prefix = level.get_prefix();
+        if $crate::console::log::should_log(level) {
+            let color_code = level.get_color_code();
+            let prefix = level.get_prefix();
 
-        $crate::console::print(format_args!(
-            concat!("\x1b[{}m{} ", $fmt, "\x1b[0m\n"),
-            color_code, prefix $(, $($arg)+)?)
-        );
+            $crate::console::print(format_args!(
+                concat!("\x1b[{}m{} ", $fmt, "\x1b[0m\n"),
+                color_code, prefix $(, $($arg)+)?)
+            )
+        };
     };
 }
 
