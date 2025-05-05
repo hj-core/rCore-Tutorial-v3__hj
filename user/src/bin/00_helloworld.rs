@@ -3,7 +3,10 @@
 
 extern crate user_lib;
 
+use user_lib::println;
+
 #[unsafe(no_mangle)]
-pub fn main() -> i32 {
+fn main() -> i32 {
+    println!("Hello, world!");
     0
 }
