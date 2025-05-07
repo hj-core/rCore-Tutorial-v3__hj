@@ -23,6 +23,8 @@ pub fn rust_main() -> ! {
     log_kernel_layout();
     log_apps_layout();
 
+    AppManager::install_app(0);
+
     println!("{} Hello world, {}!", "[   OS] ", "everybody");
     panic!("Shutdown machine!");
 }
