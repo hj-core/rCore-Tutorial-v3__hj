@@ -1,12 +1,14 @@
 #![no_std]
 #![no_main]
 
+mod batch;
 mod console;
 mod lang_items;
 mod sbi;
 
 use core::arch::global_asm;
 
+use batch::AppManager;
 use console::log;
 
 global_asm!(include_str!("entry.asm"));
@@ -87,16 +89,10 @@ fn log_kernel_layout() {
 }
 
 fn log_apps_layout() {
-    unsafe extern "C" {
-        // _num_apps is defined in link_apps.S
-        unsafe fn _num_apps();
-    }
-
-    let base_ptr = _num_apps as usize as *const u64;
-    let num_apps = unsafe { *base_ptr as usize };
-    for i in 0..num_apps {
-        let app_start = unsafe { *(base_ptr.add(i + 1)) };
-        let app_end = unsafe { *(base_ptr.add(i + 2)) };
+    let total_apps = AppManager::get_total_apps();
+    for i in 0..total_apps {
+        let app_start = AppManager::get_app_data_start(i);
+        let app_end = AppManager::get_app_data_end(i);
         let size = app_end - app_start;
         debug!("app_{} [{:#x}, {:#x}) size={}", i, app_start, app_end, size);
     }
