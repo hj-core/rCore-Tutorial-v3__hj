@@ -3,6 +3,8 @@ TARGET := riscv64gc-unknown-none-elf
 MODE ?= release
 KERNEL_ELF := target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := target/$(TARGET)/$(MODE)/os.bin
+APPS_ASM := src/link_apps.S
+USER_DIR := ../user
 
 ifeq ($(MODE), release)
 	MODE_ARG = --release
@@ -32,15 +34,24 @@ GDB_ARGS := -ex 'file $(KERNEL_ELF)' \
 			-ex 'target remote localhost:1234'
 
 # Targets
-build:
+build: build_user
 	@cargo build $(MODE_ARG)
 	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $(KERNEL_BIN)
 .PHONY: build
 
-clean:
+build_user:
+	@$(MAKE) -C $(USER_DIR) MODE=$(MODE) build
+.PHONY: build_user
+
+clean: clean_user
 	@cargo clean
 	@rm -f $(KERNEL_BIN) $(OBJDUMP_TMP)
+	@rm -f $(APPS_ASM)
 .PHONY: clean
+
+clean_user:
+	@$(MAKE) -C $(USER_DIR) clean
+.PHONY: clean_user
 
 run: build
 	@$(QEMU) $(QEMU_ARGS)

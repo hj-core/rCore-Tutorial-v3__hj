@@ -10,6 +10,7 @@ use core::arch::global_asm;
 use console::log;
 
 global_asm!(include_str!("entry.asm"));
+global_asm!(include_str!("link_apps.S"));
 
 #[unsafe(no_mangle)]
 pub fn rust_main() -> ! {
@@ -18,6 +19,7 @@ pub fn rust_main() -> ! {
 
     log::init();
     log_kernel_layout();
+    log_apps_layout();
 
     println!("{} Hello world, {}!", "[   OS] ", "everybody");
     panic!("Shutdown machine!");
@@ -82,4 +84,20 @@ fn log_kernel_layout() {
         bss_end as usize,
         bss_end as usize - bss_start as usize
     );
+}
+
+fn log_apps_layout() {
+    unsafe extern "C" {
+        // _num_apps is defined in link_apps.S
+        unsafe fn _num_apps();
+    }
+
+    let base_ptr = _num_apps as usize as *const u64;
+    let num_apps = unsafe { *base_ptr as usize };
+    for i in 0..num_apps {
+        let app_start = unsafe { *(base_ptr.add(i + 1)) };
+        let app_end = unsafe { *(base_ptr.add(i + 2)) };
+        let size = app_end - app_start;
+        debug!("app_{} [{:#x}, {:#x}) size={}", i, app_start, app_end, size);
+    }
 }
