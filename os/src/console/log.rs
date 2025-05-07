@@ -1,9 +1,9 @@
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-static MAX_LEVEL_ORDINAL: AtomicUsize = AtomicUsize::new(Level::INFO as usize);
+static MAX_LEVEL_ORDINAL: AtomicUsize = AtomicUsize::new(Level::NONE as usize);
 
 pub fn init() {
-    let max_level = get_env_log_level().unwrap_or(Level::INFO);
+    let max_level = get_env_log_level().unwrap_or(Level::NONE);
     MAX_LEVEL_ORDINAL.store(max_level as usize, Ordering::Relaxed);
 }
 
@@ -23,7 +23,7 @@ fn get_env_log_level() -> Option<Level> {
     } else if env_setting.eq_ignore_ascii_case("trace") {
         Level::TRACE
     } else {
-        Level::INFO
+        Level::NONE
     };
     Some(level)
 }
