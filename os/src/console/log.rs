@@ -1,5 +1,7 @@
 use core::sync::atomic::{AtomicUsize, Ordering};
 
+use crate::println;
+
 static MAX_LEVEL_ORDINAL: AtomicUsize = AtomicUsize::new(Level::NONE as usize);
 
 pub fn init() {
@@ -23,6 +25,10 @@ fn get_env_log_level() -> Option<Level> {
     } else if env_setting.eq_ignore_ascii_case("trace") {
         Level::TRACE
     } else {
+        println!(
+            "[   OS]  Invalid log level '{}', default to NONE.",
+            env_setting
+        );
         Level::NONE
     };
     Some(level)
