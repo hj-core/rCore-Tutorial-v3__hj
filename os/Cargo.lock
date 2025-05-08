@@ -6,8 +6,13 @@ version = 4
 name = "os"
 version = "0.1.0"
 dependencies = [
+ "riscv",
  "sbi-rt",
 ]
+
+[[package]]
+name = "riscv"
+version = "0.1.0"
 
 [[package]]
 name = "sbi-rt"
