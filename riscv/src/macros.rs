@@ -6,3 +6,12 @@ macro_rules! csrr {
         };
     };
 }
+
+#[macro_export]
+macro_rules! csrw {
+    ($csr_no:expr, $value:expr) => {
+        unsafe {
+            core::arch::asm!("csrw {csr}, {rs1}", csr = const $csr_no, rs1 = in(reg) $value)
+        }
+    };
+}
