@@ -25,6 +25,8 @@ pub fn rust_main() -> ! {
 
     AppManager::install_app(0);
 
+    test_riscv_csrr();
+
     println!("{} Hello world, {}!", "[   OS] ", "everybody");
     panic!("Shutdown machine!");
 }
@@ -98,4 +100,19 @@ fn log_apps_layout() {
         let size = app_end - app_start;
         debug!("app_{} [{:#x}, {:#x}) size={}", i, app_start, app_end, size);
     }
+}
+
+fn test_riscv_csrr() {
+    const STVAL_NO: usize = 0x143;
+    let mut stval_val: usize;
+
+    unsafe { core::arch::asm!("csrw 0x143, {rd}", rd= in(reg) 20) };
+    riscv::csrr!(STVAL_NO, stval_val);
+    assert_eq!(20, stval_val);
+
+    unsafe { core::arch::asm!("csrw 0x143, {rd}", rd= in(reg) 55) };
+    riscv::csrr!(STVAL_NO, stval_val);
+    assert_eq!(55, stval_val);
+
+    debug!("riscv::csrr worked correctly");
 }
