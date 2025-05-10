@@ -28,6 +28,7 @@ pub fn rust_main() -> ! {
     test_riscv_csrr();
     test_riscv_csrw();
     test_riscv_csrrc();
+    test_riscv_csrrs();
 
     println!("{} Hello world, {}!", "[   OS] ", "everybody");
     panic!("Shutdown machine!");
@@ -154,4 +155,26 @@ fn test_riscv_csrrc() {
     assert_eq!(0b0101, new_stval_val);
 
     debug!("riscv::csrrc worked correctly");
+}
+
+fn test_riscv_csrrs() {
+    const STVAL_NO: usize = 0x143;
+    let mut old_stval_val: usize;
+    let mut new_stval_val: usize;
+
+    // Set a single unset bit
+    unsafe { asm!("csrw {csr}, {rd}", csr = const STVAL_NO, rd= in(reg) 0b1001) };
+    riscv::csrrs!(STVAL_NO, old_stval_val, 0b10);
+    assert_eq!(0b1001, old_stval_val);
+    unsafe { asm!("csrr {rd}, {csr}", rd = lateout(reg) new_stval_val, csr = const STVAL_NO) };
+    assert_eq!(0b1011, new_stval_val);
+
+    // Set mutliple unset bits and a set bit
+    unsafe { asm!("csrw {csr}, {rd}", csr = const STVAL_NO, rd= in(reg) 0b0100) };
+    riscv::csrrs!(STVAL_NO, old_stval_val, 0b1111);
+    assert_eq!(0b0100, old_stval_val);
+    unsafe { asm!("csrr {rd}, {csr}", rd = lateout(reg) new_stval_val, csr = const STVAL_NO) };
+    assert_eq!(0b1111, new_stval_val);
+
+    debug!("riscv::csrrs worked correctly");
 }

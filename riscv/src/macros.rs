@@ -50,3 +50,22 @@ macro_rules! csrrc {
         }
     };
 }
+
+/// Sets bits in a CSR.
+///
+/// This macro sets the bits specified by the `mask` in the CSR specified
+/// by `csr_no`, and writes the previous value of the CSR to the variable
+/// `output`. It uses the `csrrs` instruction.
+#[macro_export]
+macro_rules! csrrs{
+    ($csr_no:expr, $output:ident, $mask:expr) => {
+        unsafe {
+            core::arch::asm!(
+                "csrrs {rd}, {csr}, {rs1}",
+                rd = lateout(reg) $output,
+                csr = const $csr_no,
+                rs1 = in(reg) $mask,
+            )
+        }
+    };
+}
