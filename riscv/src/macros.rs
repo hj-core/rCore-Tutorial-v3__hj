@@ -15,11 +15,19 @@ macro_rules! csrr {
     };
 }
 
+/// Writes a CSR.
+///
+/// This macro writes the `value` to the CSR specified by `csr_no`. It uses
+/// the `csrw` instruction.
 #[macro_export]
 macro_rules! csrw {
     ($csr_no:expr, $value:expr) => {
         unsafe {
-            core::arch::asm!("csrw {csr}, {rs1}", csr = const $csr_no, rs1 = in(reg) $value)
+            core::arch::asm!(
+                "csrw {csr}, {rs1}",
+                csr = const $csr_no,
+                rs1 = in(reg) $value,
+            )
         }
     };
 }
