@@ -1,8 +1,16 @@
+/// Reads a CSR.
+///
+/// This macro reads the value of the CSR specified by `csr_no` and writes
+/// it to the variable `output`. It uses the `csrr` instruction.
 #[macro_export]
 macro_rules! csrr {
     ($csr_no:expr, $output:ident) => {
         unsafe {
-            core::arch::asm!("csrr {rd}, {csr}", rd = lateout(reg) $output, csr = const $csr_no)
+            core::arch::asm!(
+                "csrr {rd}, {csr}",
+                rd = lateout(reg) $output,
+                csr = const $csr_no,
+            )
         };
     };
 }
