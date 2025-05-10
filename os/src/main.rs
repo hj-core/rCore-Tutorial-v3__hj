@@ -23,12 +23,9 @@ pub fn rust_main() -> ! {
     log_kernel_layout();
     log_apps_layout();
 
-    AppManager::install_app(0);
+    test_riscv_macros();
 
-    test_riscv_csrr();
-    test_riscv_csrw();
-    test_riscv_csrrc();
-    test_riscv_csrrs();
+    AppManager::install_app(0);
 
     println!("{} Hello world, {}!", "[   OS] ", "everybody");
     panic!("Shutdown machine!");
@@ -103,6 +100,13 @@ fn log_apps_layout() {
         let size = app_end - app_start;
         debug!("app_{} [{:#x}, {:#x}) size={}", i, app_start, app_end, size);
     }
+}
+
+fn test_riscv_macros() {
+    test_riscv_csrr();
+    test_riscv_csrw();
+    test_riscv_csrrc();
+    test_riscv_csrrs();
 }
 
 fn test_riscv_csrr() {
