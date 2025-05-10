@@ -6,7 +6,7 @@ mod console;
 mod lang_items;
 mod sbi;
 
-use core::arch::global_asm;
+use core::arch::{asm, global_asm};
 
 use batch::AppManager;
 use console::log;
@@ -27,6 +27,7 @@ pub fn rust_main() -> ! {
 
     test_riscv_csrr();
     test_riscv_csrw();
+    test_riscv_csrrc();
 
     println!("{} Hello world, {}!", "[   OS] ", "everybody");
     panic!("Shutdown machine!");
@@ -107,11 +108,11 @@ fn test_riscv_csrr() {
     const STVAL_NO: usize = 0x143;
     let mut stval_val: usize;
 
-    unsafe { core::arch::asm!("csrw 0x143, {rd}", rd= in(reg) 20) };
+    unsafe { asm!("csrw {csr}, {rd}", csr = const STVAL_NO, rd = in(reg) 20) };
     riscv::csrr!(STVAL_NO, stval_val);
     assert_eq!(20, stval_val);
 
-    unsafe { core::arch::asm!("csrw 0x143, {rd}", rd= in(reg) 55) };
+    unsafe { asm!("csrw {csr}, {rd}", csr = const STVAL_NO,rd = in(reg) 55) };
     riscv::csrr!(STVAL_NO, stval_val);
     assert_eq!(55, stval_val);
 
@@ -123,16 +124,34 @@ fn test_riscv_csrw() {
     let mut stval_val: usize;
 
     riscv::csrw!(STVAL_NO, 256);
-    unsafe {
-        core::arch::asm!("csrr {rd}, {csr}", rd = lateout(reg) stval_val, csr = const STVAL_NO)
-    };
+    unsafe { asm!("csrr {rd}, {csr}", rd = lateout(reg) stval_val, csr = const STVAL_NO) };
     assert_eq!(256, stval_val);
 
     riscv::csrw!(STVAL_NO, 996);
-    unsafe {
-        core::arch::asm!("csrr {rd}, {csr}", rd = lateout(reg) stval_val, csr = const STVAL_NO)
-    };
+    unsafe { asm!("csrr {rd}, {csr}", rd = lateout(reg) stval_val, csr = const STVAL_NO) };
     assert_eq!(996, stval_val);
 
     debug!("riscv::csrw worked correctly");
+}
+
+fn test_riscv_csrrc() {
+    const STVAL_NO: usize = 0x143;
+    let mut old_stval_val: usize;
+    let mut new_stval_val: usize;
+
+    // Clear a single set bit
+    unsafe { asm!("csrw {csr}, {rd}", csr = const STVAL_NO, rd = in(reg) 0b1111) };
+    riscv::csrrc!(STVAL_NO, old_stval_val, 0b1);
+    assert_eq!(0b1111, old_stval_val);
+    unsafe { asm!("csrr {rd}, {csr}", rd = lateout(reg) new_stval_val, csr = const STVAL_NO) };
+    assert_eq!(0b1110, new_stval_val);
+
+    // Clear multiple bits including set bits and an unset bit
+    unsafe { asm!("csrw {csr}, {rd}", csr = const STVAL_NO, rd = in(reg) 0b01111) };
+    riscv::csrrc!(STVAL_NO, old_stval_val, 0b11010);
+    assert_eq!(0b01111, old_stval_val);
+    unsafe { asm!("csrr {rd}, {csr}", rd = lateout(reg) new_stval_val, csr = const STVAL_NO) };
+    assert_eq!(0b0101, new_stval_val);
+
+    debug!("riscv::csrrc worked correctly");
 }

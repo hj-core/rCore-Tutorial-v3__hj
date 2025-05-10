@@ -31,3 +31,22 @@ macro_rules! csrw {
         }
     };
 }
+
+/// Clears bits in a CSR.
+///
+/// This macro clears the bits specified by the `mask` in the CSR specified
+/// by `csr_no`, and writes the previous value of the CSR to the variable
+/// `output`. It uses the `csrrc` instruction.
+#[macro_export]
+macro_rules! csrrc {
+    ($csr_no:expr, $output:ident, $mask:expr) => {
+        unsafe {
+            core::arch::asm!(
+                "csrrc {rd}, {csr}, {rs1}",
+                rd = lateout(reg) $output,
+                csr = const $csr_no,
+                rs1 = in(reg) $mask,
+            )
+        }
+    };
+}
