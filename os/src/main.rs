@@ -25,9 +25,16 @@ pub fn rust_main() -> ! {
     log_apps_layout();
 
     trap::init();
-    unsafe { asm!("li t0, 0x00000020", "jalr x0, t0, 0",) };
 
     AppManager::install_app(0);
+    unsafe {
+        asm!(
+            "csrw sscratch, x2",
+            "csrw sepc, {}",
+            "sret",
+            in(reg) 0x80400000_u64,
+        )
+    };
 
     println!("{} Hello world, {}!", "[   OS] ", "everybody");
     panic!("Shutdown machine!");
