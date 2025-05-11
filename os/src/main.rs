@@ -5,6 +5,7 @@ mod batch;
 mod console;
 mod lang_items;
 mod sbi;
+mod trap;
 
 use core::arch::{asm, global_asm};
 
@@ -24,6 +25,9 @@ pub fn rust_main() -> ! {
     log_apps_layout();
 
     test_riscv_macros();
+
+    trap::init();
+    unsafe { asm!("li t0, 0x00000020", "jalr x0, t0, 0",) };
 
     AppManager::install_app(0);
 
