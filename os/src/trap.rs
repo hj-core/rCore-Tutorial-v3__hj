@@ -6,7 +6,7 @@ use riscv::regs::{
 
 use crate::{batch::AppManager, println, syscall};
 
-global_asm!(include_str!("trap/trap.S"));
+global_asm!(include_str!("trap.S"));
 
 #[derive(Debug)]
 pub struct TrapContext {
