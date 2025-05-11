@@ -19,7 +19,6 @@ global_asm!(include_str!("link_apps.S"));
 #[unsafe(no_mangle)]
 pub fn rust_main() -> ! {
     clear_bss();
-    print!("{} {} cleared\n", "[   OS] ", "bss");
 
     log::init();
     log_kernel_layout();
@@ -27,7 +26,7 @@ pub fn rust_main() -> ! {
 
     trap::init();
 
-    AppManager::run_app(3);
+    AppManager::run_next_app();
 }
 
 unsafe extern "C" {

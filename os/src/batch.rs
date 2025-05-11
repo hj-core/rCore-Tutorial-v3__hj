@@ -1,12 +1,17 @@
-use core::slice;
+use core::{
+    slice,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
-use crate::{println, trap::TrapContext};
+use crate::{println, sbi::shutdown, trap::TrapContext};
 
 const KERNEL_STACK_SIZE: usize = 0x2000; // 8KB
 const USER_STACK_SIZE: usize = 0x2000; // 8KB
 
 static mut KERNEL_STACK: KernelStack = KernelStack([0u8; KERNEL_STACK_SIZE]);
 static mut USER_STACK: UserStack = UserStack([0u8; USER_STACK_SIZE]);
+
+static NEXT_APP_INDEX: AtomicUsize = AtomicUsize::new(0);
 
 #[repr(align(4096))]
 struct KernelStack([u8; KERNEL_STACK_SIZE]);
@@ -71,7 +76,16 @@ impl AppManager {
         unsafe { Self::get_info_base_ptr().add(app_index + 2).read() as usize }
     }
 
-    pub fn run_app(app_index: usize) -> ! {
+    pub fn run_next_app() -> ! {
+        let app_index = NEXT_APP_INDEX.fetch_add(1, Ordering::Relaxed);
+        if app_index >= Self::get_total_apps() {
+            println!("[   OS] No more apps to run, bye bye.");
+            shutdown(false)
+        }
+        Self::run_app(app_index)
+    }
+
+    fn run_app(app_index: usize) -> ! {
         println!("[   OS] Running app {}", app_index);
         if Self::install_app(app_index) == 0 {
             panic!("Failed to install app");

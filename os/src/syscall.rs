@@ -1,6 +1,6 @@
 use core::{slice, str};
 
-use crate::print;
+use crate::{batch::AppManager, print, println};
 
 const SYSCALL_WRITE: usize = 64;
 const FD_STD: usize = 1;
@@ -27,5 +27,6 @@ fn sys_write(fd: usize, buf: *const u8, count: usize) -> isize {
 }
 
 fn sys_exit(exit_code: isize) -> ! {
-    panic!("Exiting with code {exit_code}");
+    println!("[   OS] Application exited with code {}", exit_code);
+    AppManager::run_next_app()
 }
