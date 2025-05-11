@@ -9,12 +9,12 @@ use syscall::{sys_exit, sys_write};
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".text.entry")]
 pub extern "C" fn _start() -> ! {
-    clear_bas();
+    clear_bss();
     unsafe { sys_exit(main()) };
     unreachable!()
 }
 
-fn clear_bas() {
+fn clear_bss() {
     unsafe extern "C" {
         unsafe fn bss_start();
         unsafe fn bss_end();
