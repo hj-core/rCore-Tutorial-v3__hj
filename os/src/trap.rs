@@ -1,5 +1,5 @@
 use core::arch::global_asm;
-use riscv::regs::stvec;
+use riscv::regs::{scause, stval, stvec};
 
 global_asm!(include_str!("trap/trap.S"));
 
@@ -13,5 +13,13 @@ pub fn init() {
 
 #[unsafe(no_mangle)]
 fn trap_handler() {
-    panic!("os caught a trap!")
+    let scause_val = scause::read();
+    let cause = scause::match_cause(scause_val);
+    let stval_val = stval::read();
+
+    if matches!(cause, scause::Cause::Unknown) {
+        panic!("Unknown trap, scause={scause_val:x}, stval={stval_val:x}")
+    } else {
+        panic!("Trap: {cause:?}, stval={stval_val:x}");
+    }
 }
