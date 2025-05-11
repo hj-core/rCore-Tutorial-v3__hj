@@ -1,5 +1,37 @@
 use core::slice;
 
+use crate::{println, trap::TrapContext};
+
+const KERNEL_STACK_SIZE: usize = 0x2000; // 8KB
+const USER_STACK_SIZE: usize = 0x2000; // 8KB
+
+static mut KERNEL_STACK: KernelStack = KernelStack([0u8; KERNEL_STACK_SIZE]);
+static mut USER_STACK: UserStack = UserStack([0u8; USER_STACK_SIZE]);
+
+#[repr(align(4096))]
+struct KernelStack([u8; KERNEL_STACK_SIZE]);
+
+impl KernelStack {
+    fn get_init_top() -> usize {
+        unsafe {
+            let ptr = &raw const KERNEL_STACK.0 as *const u8;
+            ptr.add(KERNEL_STACK_SIZE) as usize
+        }
+    }
+}
+
+#[repr(align(4096))]
+struct UserStack([u8; USER_STACK_SIZE]);
+
+impl UserStack {
+    pub fn get_init_top() -> usize {
+        unsafe {
+            let ptr = &raw const USER_STACK.0 as *const u8;
+            ptr.add(USER_STACK_SIZE) as usize
+        }
+    }
+}
+
 pub struct AppManager;
 
 impl AppManager {
@@ -39,9 +71,36 @@ impl AppManager {
         unsafe { Self::get_info_base_ptr().add(app_index + 2).read() as usize }
     }
 
+    pub fn run_app(app_index: usize) -> ! {
+        println!("[   OS] Running app {}", app_index);
+        if Self::install_app(app_index) == 0 {
+            panic!("Failed to install app");
+        }
+
+        let mut kernel_sp = KernelStack::get_init_top() as *mut TrapContext;
+        assert!(
+            kernel_sp.is_aligned(),
+            "Actions required to align the kernel_sp with TrapContext"
+        );
+
+        let init_context =
+            TrapContext::new_app_context(Self::APP_MEM_ADDR as usize, UserStack::get_init_top());
+        unsafe {
+            kernel_sp = kernel_sp.offset(-1);
+            kernel_sp.write_volatile(init_context);
+        };
+
+        unsafe extern "C" {
+            unsafe fn __restore(cx: usize);
+        }
+        unsafe { __restore(kernel_sp as usize) };
+
+        unreachable!()
+    }
+
     /// `install_app` copies the app data to the agreed-upon [Self::APP_MEM_ADDR],
     /// and returns the number of bytes copied.
-    pub fn install_app(app_index: usize) -> usize {
+    fn install_app(app_index: usize) -> usize {
         if app_index >= Self::get_total_apps() {
             return 0;
         }

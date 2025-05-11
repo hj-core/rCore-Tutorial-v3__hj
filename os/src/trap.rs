@@ -1,19 +1,11 @@
 use core::arch::global_asm;
-use riscv::regs::{scause, stval, stvec};
+use riscv::regs::{scause, sstatus, stval, stvec};
 
 use crate::{print, println};
 
 global_asm!(include_str!("trap/trap.S"));
 
-pub fn init() {
-    unsafe extern "C" {
-        unsafe fn __stvec();
-    }
-    let stvec_ok = stvec::install(__stvec as usize, stvec::Mode::Direct);
-    assert!(stvec_ok, "Failed to install stvec");
-}
-
-struct TrapContext {
+pub struct TrapContext {
     /// Stores the values of registers x0 through x31.
     ///
     /// Please note that the actual implementation may skip storing some
@@ -21,6 +13,27 @@ struct TrapContext {
     x: [usize; 32],
     sstatus: usize,
     sepc: usize,
+}
+
+impl TrapContext {
+    pub fn new_app_context(app_entry_addr: usize, user_sp: usize) -> Self {
+        let sstatus = sstatus::set_spp_user();
+        let mut result = Self {
+            x: [0; 32],
+            sstatus,
+            sepc: app_entry_addr,
+        };
+        result.x[2] = user_sp;
+        result
+    }
+}
+
+pub fn init() {
+    unsafe extern "C" {
+        unsafe fn __stvec();
+    }
+    let stvec_ok = stvec::install(__stvec as usize, stvec::Mode::Direct);
+    assert!(stvec_ok, "Failed to install stvec");
 }
 
 #[unsafe(no_mangle)]

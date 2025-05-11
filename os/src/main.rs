@@ -7,7 +7,7 @@ mod lang_items;
 mod sbi;
 mod trap;
 
-use core::arch::{asm, global_asm};
+use core::arch::global_asm;
 
 use batch::AppManager;
 use console::log;
@@ -26,18 +26,7 @@ pub fn rust_main() -> ! {
 
     trap::init();
 
-    AppManager::install_app(0);
-    unsafe {
-        asm!(
-            "csrw sscratch, x2",
-            "csrw sepc, {}",
-            "sret",
-            in(reg) 0x80400000_u64,
-        )
-    };
-
-    println!("{} Hello world, {}!", "[   OS] ", "everybody");
-    panic!("Shutdown machine!");
+    AppManager::run_app(3);
 }
 
 unsafe extern "C" {
