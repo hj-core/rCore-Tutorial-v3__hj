@@ -27,6 +27,6 @@ fn sys_write(fd: usize, buf: *const u8, count: usize) -> isize {
 }
 
 fn sys_exit(exit_code: isize) -> ! {
-    println!("[   OS] Application exited with code {}", exit_code);
+    println!("[KERNEL] Application exited with code {}", exit_code);
     AppManager::run_next_app()
 }

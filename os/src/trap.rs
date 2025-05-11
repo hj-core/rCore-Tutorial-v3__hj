@@ -53,11 +53,11 @@ fn trap_handler(cx: &mut TrapContext) -> &mut TrapContext {
             cx.x[10] = syscall::syscall_handler(cx.x[17], [cx.x[10], cx.x[11], cx.x[12]]) as usize;
         }
         Cause::StoreOrAmoAccessFault | Cause::StoreOrAmoPageFault => {
-            println!("[   OS] PageFault in application, kernel killed it.");
+            println!("[KERNEL] PageFault in application, kernel killed it.");
             AppManager::run_next_app();
         }
         Cause::IllegalInstruction => {
-            println!("[   OS] IllegalInstruction in application, kernel killed it.");
+            println!("[KERNEL] IllegalInstruction in application, kernel killed it.");
             AppManager::run_next_app();
         }
         Cause::Unknown => {

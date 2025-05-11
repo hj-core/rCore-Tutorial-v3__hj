@@ -79,14 +79,14 @@ impl AppManager {
     pub fn run_next_app() -> ! {
         let app_index = NEXT_APP_INDEX.fetch_add(1, Ordering::Relaxed);
         if app_index >= Self::get_total_apps() {
-            println!("[   OS] No more apps to run, bye bye.");
+            println!("[KERNEL] No more apps to run, bye bye.");
             shutdown(false)
         }
         Self::run_app(app_index)
     }
 
     fn run_app(app_index: usize) -> ! {
-        println!("[   OS] Running app {}", app_index);
+        println!("[KERNEL] Running app {}", app_index);
         if Self::install_app(app_index) == 0 {
             panic!("Failed to install app");
         }

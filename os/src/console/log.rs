@@ -26,7 +26,7 @@ fn get_env_log_level() -> Option<Level> {
         Level::TRACE
     } else {
         println!(
-            "[   OS]  Invalid log level '{}', default to NONE.",
+            "[KERNEL]  Invalid log level '{}', default to NONE.",
             env_setting
         );
         Level::NONE
