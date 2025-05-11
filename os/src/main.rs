@@ -5,6 +5,7 @@ mod batch;
 mod console;
 mod lang_items;
 mod sbi;
+mod syscall;
 mod trap;
 
 use core::arch::global_asm;
