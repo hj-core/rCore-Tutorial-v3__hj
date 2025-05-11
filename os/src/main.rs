@@ -11,7 +11,7 @@ use core::arch::{asm, global_asm};
 use batch::AppManager;
 use console::log;
 
-global_asm!(include_str!("entry.asm"));
+global_asm!(include_str!("entry.S"));
 global_asm!(include_str!("link_apps.S"));
 
 #[unsafe(no_mangle)]
