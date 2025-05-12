@@ -8,8 +8,6 @@ USER_DIR := ../user
 
 ifeq ($(MODE), release)
 	MODE_ARG = --release
-else
-	MODE_ARG = --debug
 endif
 
 # Variables__binutils
