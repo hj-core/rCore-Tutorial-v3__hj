@@ -1,4 +1,5 @@
 use core::{
+    arch::asm,
     slice,
     sync::atomic::{AtomicUsize, Ordering},
 };
@@ -137,6 +138,7 @@ impl AppManager {
         let dst = unsafe { slice::from_raw_parts_mut(Self::APP_MEM_ADDR as *mut u8, app_size) };
         dst.copy_from_slice(app_data);
 
+        unsafe { asm!("fence.i") };
         app_size
     }
 }
