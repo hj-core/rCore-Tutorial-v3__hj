@@ -26,10 +26,6 @@ pub fn rust_main() -> ! {
 
     trap::init();
 
-    // TODO: This is added to verify the print_stack_trace, and it makes the
-    // remaining code unreachable. Please remove it from the next commit.
-    recursive_bomb(10);
-
     AppManager::run_next_app();
 }
 
@@ -101,13 +97,5 @@ fn log_apps_layout() {
         let app_end = AppManager::get_app_data_end(i);
         let size = app_end - app_start;
         debug!("app_{} [{:#x}, {:#x}) size={}", i, app_start, app_end, size);
-    }
-}
-
-fn recursive_bomb(count_down: usize) {
-    if count_down > 0 {
-        recursive_bomb(count_down - 1);
-    } else {
-        panic!("BOOM!")
     }
 }
