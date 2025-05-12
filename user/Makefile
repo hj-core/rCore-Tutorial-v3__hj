@@ -3,8 +3,6 @@ TARGET := riscv64gc-unknown-none-elf
 MODE ?= release
 ifeq ($(MODE), release)
 	MODE_ARG = --release
-else
-	MODE_ARG = --debug
 endif
 
 APP_SRC_DIR := src/bin
