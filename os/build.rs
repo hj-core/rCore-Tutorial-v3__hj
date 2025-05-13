@@ -53,9 +53,13 @@ _num_apps:
         )?;
 
         for i in 0..total_apps {
-            writeln!(dst, r#"    .quad app_{i}_start"#)?;
+            writeln!(
+                dst,
+                r#"    .quad app_{i}_name
+    .quad app_{i}_start
+    .quad app_{i}_end"#
+            )?;
         }
-        writeln!(dst, r#"    .quad app_{}_end"#, total_apps - 1)?;
 
         // Write the per-app part
         for i in 0..total_apps {
@@ -63,11 +67,15 @@ _num_apps:
                 dst,
                 r#"
     .section .data
+    .global app_{i}_name
     .global app_{i}_start
     .global app_{i}_end
+app_{i}_name:
+    .ascii "{app_name_bytes}"
 app_{i}_start:
     .incbin "{bin_dir}/{app_name}.bin"
 app_{i}_end:"#,
+                app_name_bytes = app_names[i],
                 bin_dir = Self::BIN_DIR,
                 app_name = app_names[i]
             )?;

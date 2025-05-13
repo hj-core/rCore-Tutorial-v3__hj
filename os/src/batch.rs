@@ -44,6 +44,11 @@ impl AppManager {
     /// The agreed-upon address where the running app should be installed.
     const APP_MEM_ADDR: *mut u8 = 0x8040_0000 as *mut u8;
     const APP_MAX_SIZE: usize = 0x2_0000;
+    /// The number of meta information items kept for each app.
+    ///
+    /// Currently, we keep app_name, app_start, and app_end for each app under
+    /// the _num_apps in the generated link_apps.S.
+    const APP_META_SIZE: usize = 3;
 
     /// `get_info_base_ptr` returns a pointer to the _num_apps, which is
     /// defined in the generated link_app.S.
@@ -65,7 +70,11 @@ impl AppManager {
         if app_index >= Self::get_total_apps() {
             return 0;
         }
-        unsafe { Self::get_info_base_ptr().add(app_index + 1).read() as usize }
+        unsafe {
+            Self::get_info_base_ptr()
+                .add(app_index * AppManager::APP_META_SIZE + 2)
+                .read() as usize
+        }
     }
 
     /// `get_app_data_end` returns the end address (exclusive) of the app
@@ -74,7 +83,11 @@ impl AppManager {
         if app_index >= Self::get_total_apps() {
             return 0;
         }
-        unsafe { Self::get_info_base_ptr().add(app_index + 2).read() as usize }
+        unsafe {
+            Self::get_info_base_ptr()
+                .add(app_index * AppManager::APP_META_SIZE + 3)
+                .read() as usize
+        }
     }
 
     pub fn run_next_app() -> ! {
