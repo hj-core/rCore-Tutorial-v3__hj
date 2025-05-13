@@ -4,7 +4,7 @@ pub mod console;
 mod lang_items;
 mod syscall;
 
-use syscall::{sys_exit, sys_write};
+use syscall::{sys_exit, sys_task_info, sys_write};
 
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".text.entry")]
@@ -34,4 +34,8 @@ pub fn write(fd: usize, buf: &[u8]) -> isize {
 
 pub fn exit(exit_code: i32) -> isize {
     sys_exit(exit_code)
+}
+
+pub fn get_task_info() -> isize {
+    sys_task_info()
 }
