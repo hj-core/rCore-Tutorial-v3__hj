@@ -96,6 +96,10 @@ fn log_apps_layout() {
         let app_start = AppManager::get_app_data_start(i);
         let app_end = AppManager::get_app_data_end(i);
         let size = app_end - app_start;
-        debug!("app_{} [{:#x}, {:#x}) size={}", i, app_start, app_end, size);
+        let app_name = AppManager::get_app_name(i);
+        debug!(
+            "app_{} [{:#x}, {:#x}) size={}, name={}",
+            i, app_start, app_end, size, app_name
+        );
     }
 }
