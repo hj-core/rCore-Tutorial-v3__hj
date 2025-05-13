@@ -64,6 +64,22 @@ impl AppManager {
         unsafe { Self::get_info_base_ptr().read() as usize }
     }
 
+    /// `get_app_name` returns the name of the app, or an empty string if the
+    ///  app_index is invalid. Only ASCII characters are supported.
+    pub fn get_app_name<'a>(app_index: usize) -> &'a str {
+        if app_index >= Self::get_total_apps() {
+            return "";
+        }
+        let app_name_ptr = unsafe {
+            Self::get_info_base_ptr()
+                .add(app_index * AppManager::APP_META_SIZE + 1)
+                .read() as *const u8
+        };
+        let app_name_len = Self::get_app_data_start(app_index) - (app_name_ptr as usize);
+        let slice = unsafe { slice::from_raw_parts(app_name_ptr, app_name_len) };
+        core::str::from_utf8(slice).unwrap()
+    }
+
     /// `get_app_data_start` returns the starting address of the app data
     /// in the data section.
     pub fn get_app_data_start(app_index: usize) -> usize {
@@ -100,7 +116,7 @@ impl AppManager {
     }
 
     fn run_app(app_index: usize) -> ! {
-        println!("[KERNEL] Running app {}", app_index);
+        println!("[KERNEL] Running {}", Self::get_app_name(app_index));
         if Self::install_app(app_index) == 0 {
             panic!("Failed to install app");
         }
