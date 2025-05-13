@@ -106,6 +106,13 @@ impl AppManager {
         }
     }
 
+    /// `get_curr_app_index` returns the index of the currently running app.
+    /// Clients should ensure that an app is indeed running; otherswis, the
+    /// returned result is invalid.
+    pub fn get_curr_app_index() -> usize {
+        NEXT_APP_INDEX.load(Ordering::Relaxed) - 1
+    }
+
     pub fn run_next_app() -> ! {
         let app_index = NEXT_APP_INDEX.fetch_add(1, Ordering::Relaxed);
         if app_index >= Self::get_total_apps() {
