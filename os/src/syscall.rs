@@ -3,7 +3,7 @@ use core::{slice, str};
 use crate::{batch::AppManager, print, println};
 
 const SYSCALL_WRITE: usize = 64;
-const FD_STD: usize = 1;
+const FD_STDOUT: usize = 1;
 
 const SYSCALL_EXIT: usize = 93;
 const SYSCALL_TASK_INFO: usize = (1 << 63) | 1;
@@ -18,7 +18,7 @@ pub fn syscall_handler(syscall_id: usize, args: [usize; 3]) -> isize {
 }
 
 fn sys_write(fd: usize, buf: *const u8, count: usize) -> isize {
-    if fd != FD_STD {
+    if fd != FD_STDOUT {
         panic!("Unsupported file descriptor: {fd}");
     }
 
