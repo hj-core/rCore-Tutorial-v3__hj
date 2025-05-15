@@ -26,6 +26,13 @@ fn sys_write(fd: usize, buf: *const u8, count: usize) -> isize {
         return -1;
     }
 
+    if !AppManager::can_app_read_addr(buf.addr())
+        || !AppManager::can_app_read_addr(buf.addr() + count - 1)
+    {
+        println!("[KERNEL] User attempts to read an memory address without permission");
+        return -1;
+    }
+
     let buf = unsafe { slice::from_raw_parts(buf, count) };
     let str = str::from_utf8(buf).unwrap();
     print!("{str}");
