@@ -30,7 +30,7 @@ impl KernelStack {
 struct UserStack([u8; USER_STACK_SIZE]);
 
 impl UserStack {
-    pub fn get_init_top() -> usize {
+    fn get_init_top() -> usize {
         unsafe {
             let ptr = &raw const USER_STACK.0 as *const u8;
             ptr.add(USER_STACK_SIZE) as usize
