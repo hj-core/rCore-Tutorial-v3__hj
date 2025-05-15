@@ -19,7 +19,11 @@ pub fn syscall_handler(syscall_id: usize, args: [usize; 3]) -> isize {
 
 fn sys_write(fd: usize, buf: *const u8, count: usize) -> isize {
     if fd != FD_STDOUT {
-        panic!("Unsupported file descriptor: {fd}");
+        println!(
+            "[KERNEL] User attempts to write to unsupported file descriptor: {}",
+            fd
+        );
+        return -1;
     }
 
     let buf = unsafe { slice::from_raw_parts(buf, count) };
@@ -37,6 +41,9 @@ fn sys_task_info() -> isize {
     let app_index = AppManager::get_curr_app_index();
     let app_name = AppManager::get_app_name(app_index);
 
-    println!("[KERNEL] Running Task {{ index: {}, name: {} }}", app_index, app_name);
+    println!(
+        "[KERNEL] Running Task {{ index: {}, name: {} }}",
+        app_index, app_name
+    );
     0
 }
