@@ -36,6 +36,10 @@ impl UserStack {
             ptr.add(USER_STACK_SIZE) as usize
         }
     }
+
+    fn get_lower_bound() -> usize {
+        unsafe { (&raw const USER_STACK.0).addr() }
+    }
 }
 
 pub struct AppManager;
@@ -112,6 +116,30 @@ impl AppManager {
     /// returned result is invalid.
     pub fn get_curr_app_index() -> usize {
         NEXT_APP_INDEX.load(Ordering::Relaxed) - 1
+    }
+
+    /// `can_app_read_addr` returns whether the address is readable by the currently running
+    /// app. Clients should ensure that an app is indeed running; otherswis, the returned
+    /// result is invalid.
+    pub fn can_app_read_addr(addr: usize) -> bool {
+        let app_index = Self::get_curr_app_index();
+
+        let app_size = Self::get_app_data_end(app_index) - Self::get_app_data_start(app_index);
+        if app_size == 0 {
+            return false;
+        }
+
+        let data_range = Self::APP_MEM_ADDR.addr()..(Self::APP_MEM_ADDR.addr() + app_size);
+        if data_range.contains(&addr) {
+            return true;
+        }
+
+        let stack_range = UserStack::get_lower_bound()..UserStack::get_init_top();
+        if stack_range.contains(&addr) {
+            return true;
+        }
+
+        false
     }
 
     pub fn run_next_app() -> ! {
