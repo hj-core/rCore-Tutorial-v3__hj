@@ -1,3 +1,4 @@
+use std::env;
 use std::fs::{self, File};
 use std::io::{self, Write};
 
@@ -25,6 +26,8 @@ impl UserApp {
     }
 
     fn get_app_names() -> Vec<String> {
+        let include_test = env::var("TEST").is_ok_and(|s| s == "1");
+
         fs::read_dir(Self::SRC_DIR)
             .unwrap()
             .map(|entry| entry.unwrap().file_name().into_string().unwrap())
@@ -33,6 +36,13 @@ impl UserApp {
                     .strip_suffix(Self::SRC_EXTENSION)
                     .unwrap()
                     .to_string()
+            })
+            .filter(|name| {
+                if include_test {
+                    true
+                } else {
+                    !name.starts_with("test_")
+                }
             })
             .collect::<Vec<_>>()
     }
