@@ -29,7 +29,7 @@ fn sys_write(fd: usize, buf: *const u8, count: usize) -> isize {
     if !AppManager::can_app_read_addr(buf.addr())
         || !AppManager::can_app_read_addr(buf.addr() + count - 1)
     {
-        println!("[KERNEL] User attempts to read an memory address without permission");
+        println!("[KERNEL] User attempts to read a memory address without permission");
         return -1;
     }
 
