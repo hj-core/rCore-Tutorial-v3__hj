@@ -4,7 +4,7 @@ use core::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-use crate::{println, sbi::shutdown, trap::TrapContext};
+use crate::{kernel_end, println, sbi::shutdown, trap::TrapContext};
 
 const KERNEL_STACK_SIZE: usize = 0x2000; // 8KB
 const USER_STACK_SIZE: usize = 0x2000; // 8KB
@@ -39,6 +39,15 @@ impl UserStack {
 
     fn get_lower_bound() -> usize {
         unsafe { (&raw const USER_STACK.0).addr() }
+    }
+}
+
+pub fn start() -> ! {
+    if AppManager::APP_MEM_ADDR.addr() < kernel_end as usize {
+        println!("[KERNEL] Kernel data extruded into the app-reserved addresses.");
+        shutdown(true)
+    } else {
+        AppManager::run_next_app()
     }
 }
 

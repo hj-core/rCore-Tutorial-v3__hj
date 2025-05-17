@@ -26,7 +26,7 @@ pub fn rust_main() -> ! {
 
     trap::init();
 
-    AppManager::run_next_app();
+    batch::start();
 }
 
 unsafe extern "C" {
