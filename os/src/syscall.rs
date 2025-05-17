@@ -1,6 +1,9 @@
 use core::{slice, str};
 
-use crate::{batch::AppManager, print, println};
+use crate::{
+    batch::{AppLoader, AppRunner},
+    print, println,
+};
 
 const SYSCALL_WRITE: usize = 64;
 const FD_STDOUT: usize = 1;
@@ -26,8 +29,9 @@ fn sys_write(fd: usize, buf: *const u8, count: usize) -> isize {
         return -1;
     }
 
-    if !AppManager::can_app_read_addr(buf.addr())
-        || !AppManager::can_app_read_addr(buf.addr() + count - 1)
+    let app_index = AppRunner::get_curr_app_index();
+    if !AppLoader::can_app_read_addr(app_index, buf.addr())
+        || !AppLoader::can_app_read_addr(app_index, buf.addr() + count - 1)
     {
         println!("[KERNEL] User attempts to read a memory address without permission");
         return -1;
@@ -41,12 +45,12 @@ fn sys_write(fd: usize, buf: *const u8, count: usize) -> isize {
 
 fn sys_exit(exit_code: isize) -> ! {
     println!("[KERNEL] Application exited with code {}", exit_code);
-    AppManager::run_next_app()
+    AppRunner::run_next_app()
 }
 
 fn sys_task_info() -> isize {
-    let app_index = AppManager::get_curr_app_index();
-    let app_name = AppManager::get_app_name(app_index);
+    let app_index = AppRunner::get_curr_app_index();
+    let app_name = AppLoader::get_app_name(app_index);
 
     println!(
         "[KERNEL] Running Task {{ index: {}, name: {} }}",

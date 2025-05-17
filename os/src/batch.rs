@@ -6,6 +6,10 @@ use core::{
 
 use crate::{kernel_end, println, sbi::shutdown, trap::TrapContext};
 
+/// The agreed-upon address where the running app should be installed.
+const APP_BASE_ADDR: *mut u8 = 0x8040_0000 as *mut u8;
+const APP_MAX_SIZE: usize = 0x2_0000;
+
 const KERNEL_STACK_SIZE: usize = 0x2000; // 8KB
 const USER_STACK_SIZE: usize = 0x2000; // 8KB
 
@@ -43,20 +47,17 @@ impl UserStack {
 }
 
 pub fn start() -> ! {
-    if AppManager::APP_MEM_ADDR.addr() < kernel_end as usize {
+    if APP_BASE_ADDR.addr() < kernel_end as usize {
         println!("[KERNEL] Kernel data extruded into the app-reserved addresses.");
         shutdown(true)
     } else {
-        AppManager::run_next_app()
+        AppRunner::run_next_app()
     }
 }
 
-pub struct AppManager;
+pub struct AppLoader;
 
-impl AppManager {
-    /// The agreed-upon address where the running app should be installed.
-    const APP_MEM_ADDR: *mut u8 = 0x8040_0000 as *mut u8;
-    const APP_MAX_SIZE: usize = 0x2_0000;
+impl AppLoader {
     /// The number of meta information items kept for each app.
     ///
     /// Currently, we keep app_name, app_start, and app_end for each app under
@@ -86,7 +87,7 @@ impl AppManager {
         }
         let app_name_ptr = unsafe {
             Self::get_info_base_ptr()
-                .add(app_index * AppManager::APP_META_SIZE + 1)
+                .add(app_index * Self::APP_META_SIZE + 1)
                 .read() as *const u8
         };
         let app_name_len = Self::get_app_data_start(app_index) - (app_name_ptr as usize);
@@ -102,7 +103,7 @@ impl AppManager {
         }
         unsafe {
             Self::get_info_base_ptr()
-                .add(app_index * AppManager::APP_META_SIZE + 2)
+                .add(app_index * Self::APP_META_SIZE + 2)
                 .read() as usize
         }
     }
@@ -115,30 +116,52 @@ impl AppManager {
         }
         unsafe {
             Self::get_info_base_ptr()
-                .add(app_index * AppManager::APP_META_SIZE + 3)
+                .add(app_index * Self::APP_META_SIZE + 3)
                 .read() as usize
         }
     }
 
-    /// `get_curr_app_index` returns the index of the currently running app.
-    /// Clients should ensure that an app is indeed running; otherswis, the
-    /// returned result is invalid.
-    pub fn get_curr_app_index() -> usize {
-        NEXT_APP_INDEX.load(Ordering::Relaxed) - 1
+    /// `install_app` copies the app data to the agreed-upon [Self::APP_ENTRY_ADDR],
+    /// and returns the number of bytes copied.
+    fn install_app(app_index: usize) -> usize {
+        if app_index >= Self::get_total_apps() {
+            return 0;
+        }
+
+        let app_data_start = Self::get_app_data_start(app_index);
+        let app_data_end = Self::get_app_data_end(app_index);
+        let app_size = app_data_end - app_data_start;
+
+        if app_size > APP_MAX_SIZE {
+            return 0;
+        }
+
+        // Clear the reserved memory range
+        for i in 0..APP_MAX_SIZE {
+            unsafe { APP_BASE_ADDR.add(i).write_volatile(0) };
+        }
+
+        // Copy the app data to the reserved memory range
+        let app_data = unsafe { slice::from_raw_parts(app_data_start as *const u8, app_size) };
+        let dst = unsafe { slice::from_raw_parts_mut(APP_BASE_ADDR as *mut u8, app_size) };
+        dst.copy_from_slice(app_data);
+
+        // Prevent CPU from using outdated instruction cache
+        unsafe { asm!("fence.i") };
+
+        app_size
     }
 
     /// `can_app_read_addr` returns whether the address is readable by the currently running
     /// app. Clients should ensure that an app is indeed running; otherswis, the returned
     /// result is invalid.
-    pub fn can_app_read_addr(addr: usize) -> bool {
-        let app_index = Self::get_curr_app_index();
-
+    pub fn can_app_read_addr(app_index: usize, addr: usize) -> bool {
         let app_size = Self::get_app_data_end(app_index) - Self::get_app_data_start(app_index);
         if app_size == 0 {
             return false;
         }
 
-        let data_range = Self::APP_MEM_ADDR.addr()..(Self::APP_MEM_ADDR.addr() + app_size);
+        let data_range = APP_BASE_ADDR.addr()..(APP_BASE_ADDR.addr() + app_size);
         if data_range.contains(&addr) {
             return true;
         }
@@ -150,10 +173,21 @@ impl AppManager {
 
         false
     }
+}
+
+pub struct AppRunner;
+
+impl AppRunner {
+    /// `get_curr_app_index` returns the index of the currently running app.
+    /// Clients should ensure that an app is indeed running; otherswis, the
+    /// returned result is invalid.
+    pub fn get_curr_app_index() -> usize {
+        NEXT_APP_INDEX.load(Ordering::Relaxed) - 1
+    }
 
     pub fn run_next_app() -> ! {
         let app_index = NEXT_APP_INDEX.fetch_add(1, Ordering::Relaxed);
-        if app_index >= Self::get_total_apps() {
+        if app_index >= AppLoader::get_total_apps() {
             println!("[KERNEL] No more apps to run, bye bye.");
             shutdown(false)
         }
@@ -161,7 +195,7 @@ impl AppManager {
     }
 
     fn run_app(app_index: usize) -> ! {
-        if Self::install_app(app_index) == 0 {
+        if AppLoader::install_app(app_index) == 0 {
             panic!("Failed to install app");
         }
 
@@ -172,7 +206,7 @@ impl AppManager {
         );
 
         let init_context =
-            TrapContext::new_app_context(Self::APP_MEM_ADDR as usize, UserStack::get_init_top());
+            TrapContext::new_app_context(APP_BASE_ADDR as usize, UserStack::get_init_top());
         unsafe {
             kernel_sp = kernel_sp.offset(-1);
             kernel_sp.write_volatile(init_context);
@@ -181,7 +215,7 @@ impl AppManager {
         let time = Self::read_system_time_ms();
         println!(
             "[KERNEL] {} starts at {}.{:03} seconds since system start",
-            Self::get_app_name(app_index),
+            AppLoader::get_app_name(app_index),
             time / 1000,
             time % 1000,
         );
@@ -192,35 +226,6 @@ impl AppManager {
         unsafe { __restore(kernel_sp as usize) };
 
         unreachable!()
-    }
-
-    /// `install_app` copies the app data to the agreed-upon [Self::APP_MEM_ADDR],
-    /// and returns the number of bytes copied.
-    fn install_app(app_index: usize) -> usize {
-        if app_index >= Self::get_total_apps() {
-            return 0;
-        }
-
-        let app_data_start = Self::get_app_data_start(app_index);
-        let app_data_end = Self::get_app_data_end(app_index);
-        let app_size = app_data_end - app_data_start;
-
-        if app_size > Self::APP_MAX_SIZE {
-            return 0;
-        }
-
-        // Clear the reserved memory range
-        for i in 0..Self::APP_MAX_SIZE {
-            unsafe { Self::APP_MEM_ADDR.add(i).write_volatile(0) };
-        }
-
-        // Copy the app data to the reserved memory range
-        let app_data = unsafe { slice::from_raw_parts(app_data_start as *const u8, app_size) };
-        let dst = unsafe { slice::from_raw_parts_mut(Self::APP_MEM_ADDR as *mut u8, app_size) };
-        dst.copy_from_slice(app_data);
-
-        unsafe { asm!("fence.i") };
-        app_size
     }
 
     /// `read_system_time_ms` returns the time since system start in millisecond.

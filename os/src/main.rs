@@ -10,7 +10,7 @@ mod trap;
 
 use core::arch::global_asm;
 
-use batch::AppManager;
+use batch::AppLoader;
 use console::log;
 
 global_asm!(include_str!("entry.S"));
@@ -91,15 +91,16 @@ fn log_kernel_layout() {
 }
 
 fn log_apps_layout() {
-    let total_apps = AppManager::get_total_apps();
+    let total_apps = AppLoader::get_total_apps();
     for i in 0..total_apps {
-        let app_start = AppManager::get_app_data_start(i);
-        let app_end = AppManager::get_app_data_end(i);
-        let size = app_end - app_start;
-        let app_name = AppManager::get_app_name(i);
+        let app_start = AppLoader::get_app_data_start(i);
+        let app_end = AppLoader::get_app_data_end(i);
+        let app_size = app_end - app_start;
+        let app_name = AppLoader::get_app_name(i);
+
         debug!(
             "app_{} [{:#x}, {:#x}) size={}, name={}",
-            i, app_start, app_end, size, app_name
+            i, app_start, app_end, app_size, app_name
         );
     }
 }
