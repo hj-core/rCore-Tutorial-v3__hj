@@ -152,7 +152,6 @@ impl AppManager {
     }
 
     fn run_app(app_index: usize) -> ! {
-        println!("[KERNEL] Running {}", Self::get_app_name(app_index));
         if Self::install_app(app_index) == 0 {
             panic!("Failed to install app");
         }
@@ -169,6 +168,14 @@ impl AppManager {
             kernel_sp = kernel_sp.offset(-1);
             kernel_sp.write_volatile(init_context);
         };
+
+        let time = Self::read_system_time_ms();
+        println!(
+            "[KERNEL] {} starts at {}.{:03} seconds since system start",
+            Self::get_app_name(app_index),
+            time / 1000,
+            time % 1000,
+        );
 
         unsafe extern "C" {
             unsafe fn __restore(cx: usize);
@@ -205,5 +212,14 @@ impl AppManager {
 
         unsafe { asm!("fence.i") };
         app_size
+    }
+
+    /// `read_system_time_ms` returns the time since system start in millisecond.
+    fn read_system_time_ms() -> usize {
+        let mut ticks: usize;
+        unsafe { asm!("rdtime {}", out(reg) ticks) };
+
+        const TIMER_FREQ_MHZ: usize = 10;
+        ticks / (TIMER_FREQ_MHZ * 1_000)
     }
 }
