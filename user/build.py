@@ -91,7 +91,7 @@ def _write_linker_file(_app_index: int):
 
 
 def _compute_app_base(_app_index: int) -> int:
-    return _APP_BASE_ADDR_0
+    return _APP_BASE_ADDR_0 + _app_index * _APP_MAX_SIZE
 
 
 def _cargo_build(app_name: str):

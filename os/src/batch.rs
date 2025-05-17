@@ -123,8 +123,8 @@ impl AppLoader {
 
     /// `get_app_base_ptr` returns a pointer to the agreed-upon memory address
     /// where the app should be installed.
-    pub fn get_app_base_ptr(_app_index: usize) -> *mut u8 {
-        APP_BASE_PTR_0
+    pub fn get_app_base_ptr(app_index: usize) -> *mut u8 {
+        unsafe { APP_BASE_PTR_0.add(app_index * APP_MAX_SIZE) }
     }
 
     /// `install_app` copies the app data to the agreed-upon memory address and
