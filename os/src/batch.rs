@@ -6,8 +6,8 @@ use core::{
 
 use crate::{kernel_end, println, sbi::shutdown, trap::TrapContext};
 
-/// The agreed-upon address where the running app should be installed.
-const APP_BASE_ADDR: *mut u8 = 0x8040_0000 as *mut u8;
+/// The agreed-upon address where the first user app should be installed.
+const APP_BASE_PTR_0: *mut u8 = 0x8040_0000 as *mut u8;
 const APP_MAX_SIZE: usize = 0x2_0000;
 
 const KERNEL_STACK_SIZE: usize = 0x2000; // 8KB
@@ -47,7 +47,7 @@ impl UserStack {
 }
 
 pub fn start() -> ! {
-    if APP_BASE_ADDR.addr() < kernel_end as usize {
+    if APP_BASE_PTR_0.addr() < kernel_end as usize {
         println!("[KERNEL] Kernel data extruded into the app-reserved addresses.");
         shutdown(true)
     } else {
@@ -121,8 +121,14 @@ impl AppLoader {
         }
     }
 
-    /// `install_app` copies the app data to the agreed-upon [Self::APP_ENTRY_ADDR],
-    /// and returns the number of bytes copied.
+    /// `get_app_base_ptr` returns a pointer to the agreed-upon memory address
+    /// where the app should be installed.
+    pub fn get_app_base_ptr(_app_index: usize) -> *mut u8 {
+        APP_BASE_PTR_0
+    }
+
+    /// `install_app` copies the app data to the agreed-upon memory address and
+    /// returns the number of bytes copied.
     fn install_app(app_index: usize) -> usize {
         if app_index >= Self::get_total_apps() {
             return 0;
@@ -137,13 +143,14 @@ impl AppLoader {
         }
 
         // Clear the reserved memory range
+        let app_base_ptr = Self::get_app_base_ptr(app_index);
         for i in 0..APP_MAX_SIZE {
-            unsafe { APP_BASE_ADDR.add(i).write_volatile(0) };
+            unsafe { app_base_ptr.add(i).write_volatile(0) };
         }
 
         // Copy the app data to the reserved memory range
         let app_data = unsafe { slice::from_raw_parts(app_data_start as *const u8, app_size) };
-        let dst = unsafe { slice::from_raw_parts_mut(APP_BASE_ADDR as *mut u8, app_size) };
+        let dst = unsafe { slice::from_raw_parts_mut(app_base_ptr, app_size) };
         dst.copy_from_slice(app_data);
 
         // Prevent CPU from using outdated instruction cache
@@ -161,7 +168,8 @@ impl AppLoader {
             return false;
         }
 
-        let data_range = APP_BASE_ADDR.addr()..(APP_BASE_ADDR.addr() + app_size);
+        let app_base_addr = Self::get_app_base_ptr(app_index).addr();
+        let data_range = app_base_addr..(app_base_addr + app_size);
         if data_range.contains(&addr) {
             return true;
         }
@@ -205,8 +213,8 @@ impl AppRunner {
             "Actions required to align the kernel_sp with TrapContext"
         );
 
-        let init_context =
-            TrapContext::new_app_context(APP_BASE_ADDR as usize, UserStack::get_init_top());
+        let app_base_addr = AppLoader::get_app_base_ptr(app_index).addr();
+        let init_context = TrapContext::new_app_context(app_base_addr, UserStack::get_init_top());
         unsafe {
             kernel_sp = kernel_sp.offset(-1);
             kernel_sp.write_volatile(init_context);
