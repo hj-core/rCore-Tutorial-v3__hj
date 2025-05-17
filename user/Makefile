@@ -27,9 +27,7 @@ QEMU := qemu-riscv64
 
 # Targets
 build:
-	@echo "> App List:"
-	@$(foreach app, $(APPS), echo $(patsubst $(APP_SRC_DIR)/%, %, $(app));)
-	@cargo build $(MODE_ARG)
+	@python3 build.py $(MODE_ARG) --bin
 	@$(foreach elf, $(ELFS), \
 		$(OBJCOPY) $(elf) --strip-all -O binary $(patsubst $(APP_ELF_DIR)/%, $(APP_BIN_DIR)/%.bin, $(elf)); \
 	)
@@ -37,6 +35,7 @@ build:
 
 clean:
 	@cargo clean
+	@rm src/linker.ld
 .PHONY: clean
 
 run: build
