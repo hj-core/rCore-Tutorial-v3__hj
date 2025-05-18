@@ -4,7 +4,7 @@ use core::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-use crate::{kernel_end, println, sbi::shutdown, trap::TrapContext};
+use crate::{kernel_end, log, println, sbi::shutdown, trap::TrapContext, warn};
 
 /// The agreed-upon address where the first user app should be installed.
 const APP_BASE_PTR_0: *mut u8 = 0x8040_0000 as *mut u8;
@@ -50,9 +50,15 @@ pub fn start() -> ! {
     if APP_BASE_PTR_0.addr() < kernel_end as usize {
         println!("[KERNEL] Kernel data extruded into the app-reserved addresses.");
         shutdown(true)
-    } else {
-        AppRunner::run_next_app()
     }
+
+    let failed = AppLoader::install_all_apps();
+    if failed > 0 {
+        println!("[KERNEL] {} user apps failed to install.", failed);
+        shutdown(true)
+    }
+
+    AppRunner::run_next_app()
 }
 
 pub struct AppLoader;
@@ -127,6 +133,27 @@ impl AppLoader {
         unsafe { APP_BASE_PTR_0.add(app_index * APP_MAX_SIZE) }
     }
 
+    /// `install_all_apps` copies all user app data to the agreed-upon memory
+    /// addresses and returns the number of failed installations.
+    fn install_all_apps() -> usize {
+        let mut result = 0;
+        for app_index in 0..Self::get_total_apps() {
+            if Self::install_app(app_index) == 0 {
+                warn!(
+                    "Failed to install user app: index={}, name={}",
+                    app_index,
+                    Self::get_app_name(app_index)
+                );
+                result += 1;
+            }
+        }
+
+        // Prevent CPU from using outdated instruction cache
+        unsafe { asm!("fence.i") };
+
+        result
+    }
+
     /// `install_app` copies the app data to the agreed-upon memory address and
     /// returns the number of bytes copied.
     fn install_app(app_index: usize) -> usize {
@@ -152,9 +179,6 @@ impl AppLoader {
         let app_data = unsafe { slice::from_raw_parts(app_data_start as *const u8, app_size) };
         let dst = unsafe { slice::from_raw_parts_mut(app_base_ptr, app_size) };
         dst.copy_from_slice(app_data);
-
-        // Prevent CPU from using outdated instruction cache
-        unsafe { asm!("fence.i") };
 
         app_size
     }
@@ -203,9 +227,10 @@ impl AppRunner {
     }
 
     fn run_app(app_index: usize) -> ! {
-        if AppLoader::install_app(app_index) == 0 {
-            panic!("Failed to install app");
-        }
+        assert!(
+            app_index < AppLoader::get_total_apps(),
+            "Invalid app index {app_index}"
+        );
 
         let mut kernel_sp = KernelStack::get_init_top() as *mut TrapContext;
         assert!(
