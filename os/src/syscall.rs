@@ -2,7 +2,7 @@ use core::{slice, str};
 
 use crate::{
     batch::{AppLoader, AppRunner},
-    print, println,
+    info, log, print, println, warn,
 };
 
 const SYSCALL_WRITE: usize = 64;
@@ -22,8 +22,8 @@ pub fn syscall_handler(syscall_id: usize, args: [usize; 3]) -> isize {
 
 fn sys_write(fd: usize, buf: *const u8, count: usize) -> isize {
     if fd != FD_STDOUT {
-        println!(
-            "[KERNEL] User attempts to write to unsupported file descriptor: {}",
+        warn!(
+            "User attempts to write to unsupported file descriptor: {}",
             fd
         );
         return -1;
@@ -33,7 +33,7 @@ fn sys_write(fd: usize, buf: *const u8, count: usize) -> isize {
     if !AppLoader::can_app_read_addr(app_index, buf.addr())
         || !AppLoader::can_app_read_addr(app_index, buf.addr() + count - 1)
     {
-        println!("[KERNEL] User attempts to read a memory address without permission");
+        warn!("User attempts to read a memory address without permission");
         return -1;
     }
 
@@ -44,7 +44,7 @@ fn sys_write(fd: usize, buf: *const u8, count: usize) -> isize {
 }
 
 fn sys_exit(exit_code: isize) -> ! {
-    println!("[KERNEL] Application exited with code {}", exit_code);
+    info!("Application exited with code {}", exit_code);
     AppRunner::run_next_app()
 }
 
@@ -53,7 +53,7 @@ fn sys_task_info() -> isize {
     let app_name = AppLoader::get_app_name(app_index);
 
     println!(
-        "[KERNEL] Running Task {{ index: {}, name: {} }}",
+        "Running Task {{ index: {}, name: {} }}",
         app_index, app_name
     );
     0

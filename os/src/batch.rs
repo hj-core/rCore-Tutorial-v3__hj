@@ -4,7 +4,7 @@ use core::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-use crate::{kernel_end, log, println, sbi::shutdown, trap::TrapContext, warn};
+use crate::{debug, error, info, kernel_end, log, sbi::shutdown, trap::TrapContext, warn};
 
 /// The agreed-upon address where the first user app should be installed.
 const APP_BASE_PTR_0: *mut u8 = 0x8040_0000 as *mut u8;
@@ -48,13 +48,13 @@ impl UserStack {
 
 pub fn start() -> ! {
     if APP_BASE_PTR_0.addr() < kernel_end as usize {
-        println!("[KERNEL] Kernel data extruded into the app-reserved addresses.");
+        error!("Kernel data extruded into the app-reserved addresses.");
         shutdown(true)
     }
 
     let failed = AppLoader::install_all_apps();
     if failed > 0 {
-        println!("[KERNEL] {} user apps failed to install.", failed);
+        error!("{} user apps failed to install.", failed);
         shutdown(true)
     }
 
@@ -220,7 +220,7 @@ impl AppRunner {
     pub fn run_next_app() -> ! {
         let app_index = NEXT_APP_INDEX.fetch_add(1, Ordering::Relaxed);
         if app_index >= AppLoader::get_total_apps() {
-            println!("[KERNEL] No more apps to run, bye bye.");
+            info!("No more apps to run, bye bye.");
             shutdown(false)
         }
         Self::run_app(app_index)
@@ -246,8 +246,8 @@ impl AppRunner {
         };
 
         let time = Self::read_system_time_ms();
-        println!(
-            "[KERNEL] {} starts at {}.{:03} seconds since system start",
+        debug!(
+            "{} starts at {}.{:03} seconds since system start",
             AppLoader::get_app_name(app_index),
             time / 1000,
             time % 1000,

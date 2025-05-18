@@ -25,10 +25,7 @@ fn get_env_log_level() -> Option<Level> {
     } else if env_setting.eq_ignore_ascii_case("trace") {
         Level::TRACE
     } else {
-        println!(
-            "[KERNEL]  Invalid log level '{}', default to NONE.",
-            env_setting
-        );
+        println!("Invalid log level '{}', default to NONE.", env_setting);
         Level::NONE
     };
     Some(level)
