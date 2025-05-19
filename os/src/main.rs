@@ -4,6 +4,7 @@
 mod console;
 mod lang_items;
 mod sbi;
+mod sync;
 mod syscall;
 mod task;
 mod trap;
