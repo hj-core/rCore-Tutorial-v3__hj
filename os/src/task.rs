@@ -161,13 +161,15 @@ impl AppLoader {
     fn install_all_apps() -> usize {
         let mut result = 0;
         for app_index in 0..Self::get_total_apps() {
-            if Self::install_app(app_index) == 0 {
+            if Self::install_app_data(app_index) == 0 {
                 warn!(
                     "Failed to install user app: index={}, name={}",
                     app_index,
                     Self::get_app_name(app_index)
                 );
                 result += 1;
+            } else {
+                Self::push_init_trap_context(app_index);
             }
         }
 
@@ -179,7 +181,7 @@ impl AppLoader {
 
     /// `install_app` copies the app data to the agreed-upon memory address and
     /// returns the number of bytes copied.
-    fn install_app(app_index: usize) -> usize {
+    fn install_app_data(app_index: usize) -> usize {
         if app_index >= Self::get_total_apps() {
             return 0;
         }
@@ -204,6 +206,24 @@ impl AppLoader {
         dst.copy_from_slice(app_data);
 
         app_size
+    }
+
+    /// `push_init_trap_context` pushes an initial trap context onto the app's kernel stack,
+    /// to prepare for starting the app.
+    fn push_init_trap_context(app_index: usize) {
+        let mut kernel_sp = KernelStack::get_upper_bound(app_index) as *mut TrapContext;
+        assert!(
+            kernel_sp.is_aligned(),
+            "Actions required to align the kernel_sp with TrapContext"
+        );
+
+        let app_base_addr = AppLoader::get_app_base_ptr(app_index).addr();
+        let init_context =
+            TrapContext::new_app_context(app_base_addr, UserStack::get_upper_bound(app_index));
+        unsafe {
+            kernel_sp = kernel_sp.offset(-1);
+            kernel_sp.write_volatile(init_context);
+        };
     }
 
     /// `can_app_read_addr` returns whether the address is readable by the currently running
@@ -256,20 +276,6 @@ impl AppRunner {
             "Invalid app index {app_index}"
         );
 
-        let mut kernel_sp = KernelStack::get_upper_bound(app_index) as *mut TrapContext;
-        assert!(
-            kernel_sp.is_aligned(),
-            "Actions required to align the kernel_sp with TrapContext"
-        );
-
-        let app_base_addr = AppLoader::get_app_base_ptr(app_index).addr();
-        let init_context =
-            TrapContext::new_app_context(app_base_addr, UserStack::get_upper_bound(app_index));
-        unsafe {
-            kernel_sp = kernel_sp.offset(-1);
-            kernel_sp.write_volatile(init_context);
-        };
-
         let time = Self::read_system_time_ms();
         debug!(
             "{} starts at {}.{:03} seconds since system start",
@@ -278,10 +284,13 @@ impl AppRunner {
             time % 1000,
         );
 
+        let init_kernel_sp =
+            unsafe { (KernelStack::get_upper_bound(app_index) as *mut TrapContext).offset(-1) };
+
         unsafe extern "C" {
             unsafe fn __restore(cx: usize);
         }
-        unsafe { __restore(kernel_sp as usize) };
+        unsafe { __restore(init_kernel_sp as usize) };
 
         unreachable!()
     }
