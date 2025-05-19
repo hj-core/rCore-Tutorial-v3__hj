@@ -1,5 +1,6 @@
 use core::{
     arch::asm,
+    cmp::min,
     slice,
     sync::atomic::{AtomicUsize, Ordering},
 };
@@ -9,6 +10,7 @@ use crate::{debug, error, info, kernel_end, log, sbi::shutdown, trap::TrapContex
 /// The agreed-upon address where the first user app should be installed.
 const APP_BASE_PTR_0: *mut u8 = 0x8040_0000 as *mut u8;
 const APP_MAX_SIZE: usize = 0x2_0000;
+const APP_MAX_NUMBER: usize = 8;
 
 const KERNEL_STACK_SIZE: usize = 0x2000; // 8KB
 const USER_STACK_SIZE: usize = 0x2000; // 8KB
@@ -58,6 +60,14 @@ pub fn start() -> ! {
         shutdown(true)
     }
 
+    if APP_MAX_NUMBER < AppLoader::get_total_apps_found() {
+        warn!(
+            "{} user apps found. Supports up to {}; the rest are ignored.",
+            AppLoader::get_total_apps_found(),
+            APP_MAX_NUMBER,
+        );
+    }
+
     AppRunner::run_next_app()
 }
 
@@ -79,8 +89,16 @@ impl AppLoader {
         _num_apps as *const u64
     }
 
-    /// `get_total_apps` returns the total number of user apps.
+    /// `get_total_apps` returns the total number of user apps, limited by
+    /// [APP_MAX_NUMBER]. To obtain the number of apps discovered, please use
+    /// [Self::get_total_apps_found].
     pub fn get_total_apps() -> usize {
+        min(Self::get_total_apps_found(), APP_MAX_NUMBER)
+    }
+
+    /// `get_total_apps_found` returns the total number of user apps found.
+    /// This value may be greater than [APP_MAX_NUMBER].
+    fn get_total_apps_found() -> usize {
         unsafe { Self::get_info_base_ptr().read() as usize }
     }
 
