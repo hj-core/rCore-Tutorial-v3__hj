@@ -18,7 +18,8 @@ const USER_STACK_SIZE: usize = 0x2000; // 8KB
 static mut APP_KERNEL_STACK: [KernelStack; APP_MAX_NUMBER] =
     [KernelStack([0u8; KERNEL_STACK_SIZE]); APP_MAX_NUMBER];
 
-static mut USER_STACK: UserStack = UserStack([0u8; USER_STACK_SIZE]);
+static mut APP_USER_STACK: [UserStack; APP_MAX_NUMBER] =
+    [UserStack([0u8; USER_STACK_SIZE]); APP_MAX_NUMBER];
 
 static NEXT_APP_INDEX: AtomicUsize = AtomicUsize::new(0);
 
@@ -35,19 +36,20 @@ impl KernelStack {
     }
 }
 
+#[derive(Clone, Copy)]
 #[repr(align(4096))]
 struct UserStack([u8; USER_STACK_SIZE]);
 
 impl UserStack {
-    fn get_init_top() -> usize {
+    fn get_upper_bound(app_index: usize) -> usize {
         unsafe {
-            let ptr = &raw const USER_STACK.0 as *const u8;
+            let ptr = &raw const APP_USER_STACK[app_index].0 as *const u8;
             ptr.add(USER_STACK_SIZE) as usize
         }
     }
 
-    fn get_lower_bound() -> usize {
-        unsafe { (&raw const USER_STACK.0).addr() }
+    fn get_lower_bound(app_index: usize) -> usize {
+        unsafe { (&raw const APP_USER_STACK[app_index].0).addr() }
     }
 }
 
@@ -219,7 +221,8 @@ impl AppLoader {
             return true;
         }
 
-        let stack_range = UserStack::get_lower_bound()..UserStack::get_init_top();
+        let stack_range =
+            UserStack::get_lower_bound(app_index)..UserStack::get_upper_bound(app_index);
         if stack_range.contains(&addr) {
             return true;
         }
@@ -260,7 +263,8 @@ impl AppRunner {
         );
 
         let app_base_addr = AppLoader::get_app_base_ptr(app_index).addr();
-        let init_context = TrapContext::new_app_context(app_base_addr, UserStack::get_init_top());
+        let init_context =
+            TrapContext::new_app_context(app_base_addr, UserStack::get_upper_bound(app_index));
         unsafe {
             kernel_sp = kernel_sp.offset(-1);
             kernel_sp.write_volatile(init_context);
