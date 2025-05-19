@@ -15,18 +15,21 @@ const APP_MAX_NUMBER: usize = 8;
 const KERNEL_STACK_SIZE: usize = 0x2000; // 8KB
 const USER_STACK_SIZE: usize = 0x2000; // 8KB
 
-static mut KERNEL_STACK: KernelStack = KernelStack([0u8; KERNEL_STACK_SIZE]);
+static mut APP_KERNEL_STACK: [KernelStack; APP_MAX_NUMBER] =
+    [KernelStack([0u8; KERNEL_STACK_SIZE]); APP_MAX_NUMBER];
+
 static mut USER_STACK: UserStack = UserStack([0u8; USER_STACK_SIZE]);
 
 static NEXT_APP_INDEX: AtomicUsize = AtomicUsize::new(0);
 
+#[derive(Clone, Copy)]
 #[repr(align(4096))]
 struct KernelStack([u8; KERNEL_STACK_SIZE]);
 
 impl KernelStack {
-    fn get_init_top() -> usize {
+    fn get_upper_bound(app_index: usize) -> usize {
         unsafe {
-            let ptr = &raw const KERNEL_STACK.0 as *const u8;
+            let ptr = &raw const APP_KERNEL_STACK[app_index].0 as *const u8;
             ptr.add(KERNEL_STACK_SIZE) as usize
         }
     }
@@ -250,7 +253,7 @@ impl AppRunner {
             "Invalid app index {app_index}"
         );
 
-        let mut kernel_sp = KernelStack::get_init_top() as *mut TrapContext;
+        let mut kernel_sp = KernelStack::get_upper_bound(app_index) as *mut TrapContext;
         assert!(
             kernel_sp.is_aligned(),
             "Actions required to align the kernel_sp with TrapContext"
