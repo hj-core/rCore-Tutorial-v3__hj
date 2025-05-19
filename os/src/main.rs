@@ -1,17 +1,17 @@
 #![no_std]
 #![no_main]
 
-mod batch;
 mod console;
 mod lang_items;
 mod sbi;
 mod syscall;
+mod task;
 mod trap;
 
 use core::arch::global_asm;
 
-use batch::AppLoader;
 use console::log;
+use task::AppLoader;
 
 global_asm!(include_str!("entry.S"));
 global_asm!(include_str!("link_apps.S"));
@@ -26,7 +26,7 @@ pub fn rust_main() -> ! {
 
     trap::init();
 
-    batch::start();
+    task::start();
 }
 
 unsafe extern "C" {

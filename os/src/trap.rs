@@ -4,7 +4,7 @@ use riscv::regs::{
     sstatus, stval, stvec,
 };
 
-use crate::{batch::AppRunner, warn, log, syscall};
+use crate::{log, syscall, task::AppRunner, warn};
 
 global_asm!(include_str!("trap.S"));
 
