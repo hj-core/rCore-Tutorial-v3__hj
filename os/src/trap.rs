@@ -9,6 +9,7 @@ use crate::{log, syscall, task::runner, warn};
 global_asm!(include_str!("trap.S"));
 
 #[derive(Debug)]
+#[repr(C)]
 pub struct TrapContext {
     /// Stores the values of registers x0 through x31.
     ///
