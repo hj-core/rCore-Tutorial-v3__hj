@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 sbi-rt = { version = "0.0.2", features = ["legacy"] }
 riscv = { path = "../riscv" }
+lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
