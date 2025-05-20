@@ -2,7 +2,7 @@ use core::{slice, str};
 
 use crate::{
     info, log, print, println,
-    task::{AppLoader, AppRunner},
+    task::{AppRunner, loader},
     warn,
 };
 
@@ -31,8 +31,8 @@ fn sys_write(fd: usize, buf: *const u8, count: usize) -> isize {
     }
 
     let app_index = AppRunner::get_curr_app_index();
-    if !AppLoader::can_app_read_addr(app_index, buf.addr())
-        || !AppLoader::can_app_read_addr(app_index, buf.addr() + count - 1)
+    if !loader::can_app_read_addr(app_index, buf.addr())
+        || !loader::can_app_read_addr(app_index, buf.addr() + count - 1)
     {
         warn!("User attempts to read a memory address without permission");
         return -1;
@@ -51,7 +51,7 @@ fn sys_exit(exit_code: isize) -> ! {
 
 fn sys_task_info() -> isize {
     let app_index = AppRunner::get_curr_app_index();
-    let app_name = AppLoader::get_app_name(app_index);
+    let app_name = loader::get_app_name(app_index);
 
     println!(
         "Running Task {{ index: {}, name: {} }}",
