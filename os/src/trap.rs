@@ -4,7 +4,7 @@ use riscv::regs::{
     sstatus, stval, stvec,
 };
 
-use crate::{log, syscall, task::AppRunner, warn};
+use crate::{log, syscall, task::runner, warn};
 
 global_asm!(include_str!("trap.S"));
 
@@ -54,11 +54,11 @@ fn trap_handler(cx: &mut TrapContext) -> &mut TrapContext {
         }
         Cause::StoreOrAmoAccessFault | Cause::StoreOrAmoPageFault => {
             warn!("PageFault in application, kernel killed it.");
-            AppRunner::run_next_app();
+            runner::run_next_app();
         }
         Cause::IllegalInstruction => {
             warn!("IllegalInstruction in application, kernel killed it.");
-            AppRunner::run_next_app();
+            runner::run_next_app();
         }
         Cause::Unknown => {
             panic!("Unknown trap, scause={scause_val:x}, stval={stval_val:x}, context={cx:?}")

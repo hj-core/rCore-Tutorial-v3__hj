@@ -2,7 +2,7 @@ use core::{slice, str};
 
 use crate::{
     info, log, print, println,
-    task::{AppRunner, loader},
+    task::{loader, runner},
     warn,
 };
 
@@ -30,7 +30,7 @@ fn sys_write(fd: usize, buf: *const u8, count: usize) -> isize {
         return -1;
     }
 
-    let app_index = AppRunner::get_curr_app_index();
+    let app_index = runner::get_curr_app_index();
     if !loader::can_app_read_addr(app_index, buf.addr())
         || !loader::can_app_read_addr(app_index, buf.addr() + count - 1)
     {
@@ -46,11 +46,11 @@ fn sys_write(fd: usize, buf: *const u8, count: usize) -> isize {
 
 fn sys_exit(exit_code: isize) -> ! {
     info!("Application exited with code {}", exit_code);
-    AppRunner::run_next_app()
+    runner::run_next_app()
 }
 
 fn sys_task_info() -> isize {
-    let app_index = AppRunner::get_curr_app_index();
+    let app_index = runner::get_curr_app_index();
     let app_name = loader::get_app_name(app_index);
 
     println!(
