@@ -67,5 +67,5 @@ pub fn start() -> ! {
         );
     }
 
-    runner::run_next_app()
+    runner::run_first_app()
 }

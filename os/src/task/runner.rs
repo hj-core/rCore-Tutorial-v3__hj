@@ -7,18 +7,23 @@ use crate::{debug, info, log, sbi::shutdown, trap::TrapContext};
 
 use super::{KernelStack, loader};
 
-static NEXT_APP_INDEX: AtomicUsize = AtomicUsize::new(0);
+static CURRENT_APP_INDEX: AtomicUsize = AtomicUsize::new(0);
 
 /// `get_curr_app_index` returns the index of the currently running app.
 /// Clients should ensure that an app is indeed running; otherswis, the
 /// returned result is invalid.
-pub(crate) fn get_curr_app_index() -> usize {
-    NEXT_APP_INDEX.load(Ordering::Relaxed) - 1
+pub(crate) fn get_current_app_index() -> usize {
+    CURRENT_APP_INDEX.load(Ordering::Relaxed)
+}
+
+pub(super) fn run_first_app() -> ! {
+    CURRENT_APP_INDEX.store(0, Ordering::Relaxed);
+    run_app(0)
 }
 
 pub(crate) fn run_next_app() -> ! {
-    let app_index = NEXT_APP_INDEX.fetch_add(1, Ordering::Relaxed);
-    if app_index >= loader::get_total_apps() {
+    let app_index = CURRENT_APP_INDEX.fetch_add(1, Ordering::Relaxed) + 1;
+    if app_index == loader::get_total_apps() {
         info!("No more apps to run, bye bye.");
         shutdown(false)
     }

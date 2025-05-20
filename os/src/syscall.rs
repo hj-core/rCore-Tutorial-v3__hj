@@ -30,7 +30,7 @@ fn sys_write(fd: usize, buf: *const u8, count: usize) -> isize {
         return -1;
     }
 
-    let app_index = runner::get_curr_app_index();
+    let app_index = runner::get_current_app_index();
     if !loader::can_app_read_addr(app_index, buf.addr())
         || !loader::can_app_read_addr(app_index, buf.addr() + count - 1)
     {
@@ -50,7 +50,7 @@ fn sys_exit(exit_code: isize) -> ! {
 }
 
 fn sys_task_info() -> isize {
-    let app_index = runner::get_curr_app_index();
+    let app_index = runner::get_current_app_index();
     let app_name = loader::get_app_name(app_index);
 
     println!(
