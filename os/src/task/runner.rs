@@ -6,6 +6,7 @@ use core::{
 use crate::{
     debug, info, log,
     sbi::shutdown,
+    task::{TASK_CONTROL_BLOCK, control::TaskState},
     trap::{self, TrapContext},
 };
 
@@ -40,6 +41,10 @@ fn run_app(app_index: usize) -> ! {
         "Invalid app index {app_index}"
     );
 
+    TASK_CONTROL_BLOCK[app_index]
+        .lock()
+        .change_state(TaskState::Running);
+
     let time = read_system_time_ms();
     debug!(
         "{} starts at {}.{:03} seconds since system start",
@@ -52,7 +57,6 @@ fn run_app(app_index: usize) -> ! {
         unsafe { (KernelStack::get_upper_bound(app_index) as *mut TrapContext).offset(-1) };
 
     unsafe { trap::__restore(init_kernel_sp) };
-
     unreachable!()
 }
 
