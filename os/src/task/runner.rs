@@ -1,5 +1,5 @@
 use core::{
-    arch::asm,
+    arch::{asm, global_asm},
     sync::atomic::{AtomicUsize, Ordering},
 };
 
@@ -8,12 +8,17 @@ use crate::{
     sbi::shutdown,
     task::{
         KernelStack, TASK_CONTROL_BLOCK,
-        control::TaskState,
+        control::{TaskContext, TaskState},
         debug_print_tcb,
         loader::{get_app_name, get_total_apps},
     },
     trap::{self, TrapContext},
 };
+
+global_asm!(include_str!("switch.S"));
+unsafe extern "C" {
+    unsafe fn __switch(curr_context: *mut TaskContext, next_context: *const TaskContext);
+}
 
 static CURRENT_APP_INDEX: AtomicUsize = AtomicUsize::new(0);
 
