@@ -4,7 +4,11 @@ use riscv::regs::{
     sstatus, stval, stvec,
 };
 
-use crate::{log, syscall, task::runner, warn};
+use crate::{
+    log, syscall,
+    task::{self, control::TaskState, runner},
+    warn,
+};
 
 global_asm!(include_str!("trap.S"));
 
@@ -47,30 +51,43 @@ pub fn init() {
 }
 
 #[unsafe(no_mangle)]
-fn trap_handler(cx: &mut TrapContext) -> &mut TrapContext {
+fn trap_handler(context: &mut TrapContext) -> &mut TrapContext {
     let scause_val = scause::read();
     let cause = scause::match_cause(scause_val);
     let stval_val = stval::read();
 
     match cause {
         Cause::UserEnvironmentCall => {
-            cx.sepc += 4;
-            cx.x[10] = syscall::syscall_handler(cx.x[17], [cx.x[10], cx.x[11], cx.x[12]]) as usize;
+            context.sepc += 4;
+            context.x[10] = syscall::syscall_handler(
+                context.x[17],
+                [context.x[10], context.x[11], context.x[12]],
+            ) as usize;
         }
+
         Cause::StoreOrAmoAccessFault | Cause::StoreOrAmoPageFault => {
+            assert!(task::is_current_task_running());
+            task::change_current_task_state(TaskState::Killed);
             warn!("PageFault in application, kernel killed it.");
             runner::run_next_app();
         }
+
         Cause::IllegalInstruction => {
+            assert!(task::is_current_task_running());
+            task::change_current_task_state(TaskState::Killed);
             warn!("IllegalInstruction in application, kernel killed it.");
             runner::run_next_app();
         }
+
         Cause::Unknown => {
-            panic!("Unknown trap, scause={scause_val:x}, stval={stval_val:x}, context={cx:?}")
+            panic!(
+                "Unknown trap, scause={scause_val:#x}, stval={stval_val:#x}, context={context:#?}"
+            )
         }
+
         _ => {
-            panic!("Trap: {cause:?}, stval={stval_val:x}, context={cx:#x?}");
+            panic!("Trap: {cause:?}, stval={stval_val:#x}, context={context:#x?}");
         }
     }
-    cx
+    context
 }

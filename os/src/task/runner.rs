@@ -6,7 +6,7 @@ use core::{
 use crate::{
     debug, info, log,
     sbi::shutdown,
-    task::{TASK_CONTROL_BLOCK, control::TaskState},
+    task::{TASK_CONTROL_BLOCK, control::TaskState, debug_print_tcb},
     trap::{self, TrapContext},
 };
 
@@ -29,6 +29,7 @@ pub(super) fn run_first_app() -> ! {
 pub(crate) fn run_next_app() -> ! {
     let app_index = CURRENT_APP_INDEX.fetch_add(1, Ordering::Relaxed) + 1;
     if app_index == loader::get_total_apps() {
+        debug_print_tcb();
         info!("No more apps to run, bye bye.");
         shutdown(false)
     }

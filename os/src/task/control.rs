@@ -30,7 +30,7 @@ impl TaskControlBlock {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(super) enum TaskState {
+pub(crate) enum TaskState {
     Unused,
     Ready,
     Running,
