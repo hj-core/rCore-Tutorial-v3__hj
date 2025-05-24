@@ -11,10 +11,26 @@ impl TaskControlBlock {
             context: TaskContext::new_placeholder(),
         }
     }
+
+    pub(super) fn get_state(&self) -> TaskState {
+        self.state
+    }
+
+    pub(super) fn change_state(&mut self, new_state: TaskState) {
+        self.state = new_state;
+    }
+
+    pub(super) fn get_context(&self) -> &TaskContext {
+        &self.context
+    }
+
+    pub(super) fn get_mut_context(&mut self) -> &mut TaskContext {
+        &mut self.context
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-enum TaskState {
+pub(super) enum TaskState {
     Unused,
     Ready,
     Running,
@@ -38,5 +54,13 @@ impl TaskContext {
             sp: 0,
             s: [0; 12],
         }
+    }
+
+    pub(super) fn set_ra(&mut self, value: usize) {
+        self.ra = value;
+    }
+
+    pub(super) fn set_sp(&mut self, value: usize) {
+        self.sp = value;
     }
 }

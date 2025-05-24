@@ -4,7 +4,7 @@ pub(crate) mod runner;
 
 use core::array;
 
-use crate::{error, kernel_end, log, sbi::shutdown, sync::spin::SpinLock, warn};
+use crate::{debug, error, kernel_end, log, sbi::shutdown, sync::spin::SpinLock, warn};
 use control::TaskControlBlock;
 use lazy_static::lazy_static;
 
@@ -77,5 +77,19 @@ pub fn start() -> ! {
         );
     }
 
+    debug_print_tcb();
+
     runner::run_first_app()
+}
+
+fn debug_print_tcb() {
+    for i in 0..APP_MAX_NUMBER {
+        let tcb = TASK_CONTROL_BLOCK[i].lock();
+        debug!(
+            "tcb {}: state={:?}, context={:#x?}",
+            i,
+            tcb.get_state(),
+            tcb.get_context()
+        );
+    }
 }

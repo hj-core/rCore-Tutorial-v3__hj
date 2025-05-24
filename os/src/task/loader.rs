@@ -7,7 +7,7 @@ use crate::{
     warn,
 };
 
-use super::{APP_BASE_PTR_0, APP_MAX_NUMBER, APP_MAX_SIZE};
+use super::{APP_BASE_PTR_0, APP_MAX_NUMBER, APP_MAX_SIZE, TASK_CONTROL_BLOCK, control::TaskState};
 
 /// The number of meta information items kept for each app.
 ///
@@ -100,6 +100,7 @@ pub(super) fn install_all_apps() -> usize {
             result += 1;
         } else {
             push_init_trap_context(app_index);
+            set_first_run_tcb(app_index);
         }
     }
 
@@ -154,6 +155,25 @@ fn push_init_trap_context(app_index: usize) {
         kernel_sp = kernel_sp.offset(-1);
         kernel_sp.write_volatile(init_context);
     };
+}
+
+/// `prepare_first_run_tcb` configures the [TaskControlBlock] of the app for its first
+/// run.
+///
+/// [TaskControlBlock]: super::control::TaskControlBlock
+fn set_first_run_tcb(app_index: usize) {
+    let init_kernel_sp = KernelStack::get_upper_bound(app_index) - size_of::<TrapContext>();
+
+    unsafe extern "C" {
+        unsafe fn __restore(cx: usize);
+    }
+
+    let mut tcb = TASK_CONTROL_BLOCK[app_index].lock();
+    tcb.change_state(TaskState::Ready);
+
+    let context = tcb.get_mut_context();
+    context.set_ra(__restore as usize);
+    context.set_sp(init_kernel_sp);
 }
 
 /// `can_app_read_addr` returns whether the address is readable by the currently running
