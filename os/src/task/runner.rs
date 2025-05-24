@@ -7,12 +7,11 @@ use crate::{
     debug, info, log,
     sbi::shutdown,
     task::{
-        KernelStack, TASK_CONTROL_BLOCK,
+        APP_MAX_NUMBER, TASK_CONTROL_BLOCK,
         control::{TaskContext, TaskState},
         debug_print_tcb,
         loader::{get_app_name, get_total_apps},
     },
-    trap::{self, TrapContext},
 };
 
 global_asm!(include_str!("switch.S"));
@@ -30,11 +29,12 @@ pub(crate) fn get_current_app_index() -> usize {
 }
 
 pub(super) fn run_first_app() -> ! {
-    CURRENT_APP_INDEX.store(0, Ordering::Relaxed);
-    run_app(0)
+    CURRENT_APP_INDEX.store(APP_MAX_NUMBER, Ordering::Relaxed);
+    run_app(0);
+    unreachable!()
 }
 
-pub(crate) fn run_next_app() -> ! {
+pub(crate) fn run_next_app() {
     if let Some(app_index) = find_next_app() {
         run_app(app_index)
     } else {
@@ -53,21 +53,26 @@ fn find_next_app() -> Option<usize> {
         .find(|&i| matches!(TASK_CONTROL_BLOCK[i].lock().get_state(), TaskState::Ready))
 }
 
-fn run_app(app_index: usize) -> ! {
+fn run_app(app_index: usize) {
     assert!(
         app_index < get_total_apps(),
         "Invalid app index {app_index}"
     );
 
+    let mut next_tcb = TASK_CONTROL_BLOCK[app_index].lock();
     assert_eq!(
-        TASK_CONTROL_BLOCK[app_index].lock().get_state(),
+        next_tcb.get_state(),
         TaskState::Ready,
         "Cannot run a non-ready app"
     );
+    next_tcb.change_state(TaskState::Running);
 
-    TASK_CONTROL_BLOCK[app_index]
+    let next_context = next_tcb.get_context() as *const TaskContext;
+    drop(next_tcb);
+
+    let curr_context = TASK_CONTROL_BLOCK[get_current_app_index()]
         .lock()
-        .change_state(TaskState::Running);
+        .get_mut_context() as *mut TaskContext;
 
     CURRENT_APP_INDEX.store(app_index, Ordering::Relaxed);
 
@@ -79,11 +84,7 @@ fn run_app(app_index: usize) -> ! {
         time % 1000,
     );
 
-    let init_kernel_sp =
-        unsafe { (KernelStack::get_upper_bound(app_index) as *mut TrapContext).offset(-1) };
-
-    unsafe { trap::__restore(init_kernel_sp) };
-    unreachable!()
+    unsafe { __switch(curr_context, next_context) };
 }
 
 /// `read_system_time_ms` returns the time since system start in millisecond.

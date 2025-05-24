@@ -13,7 +13,7 @@ use crate::{
 global_asm!(include_str!("trap.S"));
 
 unsafe extern "C" {
-    pub(super) unsafe fn __restore(context: *mut TrapContext);
+    pub(super) unsafe fn __restore();
 }
 
 #[derive(Debug)]

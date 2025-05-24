@@ -25,7 +25,8 @@ static mut APP_USER_STACK: [UserStack; APP_MAX_NUMBER] =
     [UserStack([0u8; USER_STACK_SIZE]); APP_MAX_NUMBER];
 
 lazy_static! {
-    static ref TASK_CONTROL_BLOCK: [SpinLock<TaskControlBlock>; APP_MAX_NUMBER] =
+    // An extra slot to store the switched-out context when running the first task
+    static ref TASK_CONTROL_BLOCK: [SpinLock<TaskControlBlock>; APP_MAX_NUMBER + 1] =
         array::from_fn(|_| { SpinLock::new(TaskControlBlock::new_placeholder()) });
 }
 

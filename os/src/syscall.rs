@@ -47,11 +47,13 @@ fn sys_write(fd: usize, buf: *const u8, count: usize) -> isize {
     count as isize
 }
 
-fn sys_exit(exit_code: isize) -> ! {
+fn sys_exit(exit_code: isize) -> isize {
     assert!(is_current_task_running());
     change_current_task_state(TaskState::Exited);
+
     info!("Application exited with code {}", exit_code);
-    run_next_app()
+    run_next_app();
+    exit_code
 }
 
 fn sys_task_info() -> isize {

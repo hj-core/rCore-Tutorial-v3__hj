@@ -34,12 +34,7 @@ __stvec:
     mv x10, sp                # Set the arugment for trap_handler, i.e., a pointer to the saved context
     call trap_handler
 
-    # We reach this point either when we return from the trap_handler or when we directly call
-    # __restore. The latter case occurs when we run a new app and use __restore to configure its
-    # context. In both cases, we should pass the correct pointer to the saved TrapContext, i.e.,
-    # the kernel_sp, as the argument to __restore.
 __restore:
-    mv sp, x10                # Restore the kernel_sp
     ld x5, 32*8(sp)           # Restore the sstatus, sepc and sscratch
     ld x6, 33*8(sp)
     ld x7, 2*8(sp)
