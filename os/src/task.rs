@@ -1,12 +1,14 @@
-pub(super) mod control;
-pub(crate) mod loader;
-pub(crate) mod runner;
+pub(crate) mod prelude;
+
+mod control;
+mod loader;
+mod runner;
 
 use core::array;
+use lazy_static::lazy_static;
 
 use crate::{debug, error, kernel_end, log, sbi::shutdown, sync::spin::SpinLock, warn};
 use control::{TaskControlBlock, TaskState};
-use lazy_static::lazy_static;
 
 /// The agreed-upon address where the first user app should be installed.
 const APP_BASE_PTR_0: *mut u8 = 0x8040_0000 as *mut u8;
@@ -96,7 +98,7 @@ fn debug_print_tcb() {
 
 /// `is_current_task_running` returns whether the current task is in the
 /// [TaskState::Running] state.
-pub(super) fn is_current_task_running() -> bool {
+pub(crate) fn is_current_task_running() -> bool {
     matches!(
         TASK_CONTROL_BLOCK[runner::get_current_app_index()]
             .lock()
@@ -105,7 +107,7 @@ pub(super) fn is_current_task_running() -> bool {
     )
 }
 
-pub(super) fn change_current_task_state(new_state: TaskState) {
+pub(crate) fn change_current_task_state(new_state: TaskState) {
     TASK_CONTROL_BLOCK[runner::get_current_app_index()]
         .lock()
         .change_state(new_state);

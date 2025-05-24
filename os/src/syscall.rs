@@ -2,7 +2,10 @@ use core::{slice, str};
 
 use crate::{
     info, log, print, println,
-    task::{self, control::TaskState, loader, runner},
+    task::prelude::{
+        TaskState, can_app_read_addr, change_current_task_state, get_app_name,
+        get_current_app_index, is_current_task_running, run_next_app,
+    },
     warn,
 };
 
@@ -30,9 +33,9 @@ fn sys_write(fd: usize, buf: *const u8, count: usize) -> isize {
         return -1;
     }
 
-    let app_index = runner::get_current_app_index();
-    if !loader::can_app_read_addr(app_index, buf.addr())
-        || !loader::can_app_read_addr(app_index, buf.addr() + count - 1)
+    let app_index = get_current_app_index();
+    if !can_app_read_addr(app_index, buf.addr())
+        || !can_app_read_addr(app_index, buf.addr() + count - 1)
     {
         warn!("User attempts to read a memory address without permission");
         return -1;
@@ -45,15 +48,15 @@ fn sys_write(fd: usize, buf: *const u8, count: usize) -> isize {
 }
 
 fn sys_exit(exit_code: isize) -> ! {
-    assert!(task::is_current_task_running());
-    task::change_current_task_state(TaskState::Exited);
+    assert!(is_current_task_running());
+    change_current_task_state(TaskState::Exited);
     info!("Application exited with code {}", exit_code);
-    runner::run_next_app()
+    run_next_app()
 }
 
 fn sys_task_info() -> isize {
-    let app_index = runner::get_current_app_index();
-    let app_name = loader::get_app_name(app_index);
+    let app_index = get_current_app_index();
+    let app_name = get_app_name(app_index);
 
     println!(
         "Running Task {{ index: {}, name: {} }}",

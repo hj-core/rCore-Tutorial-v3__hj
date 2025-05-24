@@ -6,7 +6,7 @@ use riscv::regs::{
 
 use crate::{
     log, syscall,
-    task::{self, control::TaskState, runner},
+    task::prelude::{TaskState, change_current_task_state, is_current_task_running, run_next_app},
     warn,
 };
 
@@ -66,17 +66,17 @@ fn trap_handler(context: &mut TrapContext) -> &mut TrapContext {
         }
 
         Cause::StoreOrAmoAccessFault | Cause::StoreOrAmoPageFault => {
-            assert!(task::is_current_task_running());
-            task::change_current_task_state(TaskState::Killed);
+            assert!(is_current_task_running());
+            change_current_task_state(TaskState::Killed);
             warn!("PageFault in application, kernel killed it.");
-            runner::run_next_app();
+            run_next_app();
         }
 
         Cause::IllegalInstruction => {
-            assert!(task::is_current_task_running());
-            task::change_current_task_state(TaskState::Killed);
+            assert!(is_current_task_running());
+            change_current_task_state(TaskState::Killed);
             warn!("IllegalInstruction in application, kernel killed it.");
-            runner::run_next_app();
+            run_next_app();
         }
 
         Cause::Unknown => {
