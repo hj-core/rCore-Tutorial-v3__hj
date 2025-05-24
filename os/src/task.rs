@@ -2,7 +2,11 @@ mod control;
 pub(crate) mod loader;
 pub(crate) mod runner;
 
-use crate::{error, kernel_end, log, sbi::shutdown, warn};
+use core::array;
+
+use crate::{error, kernel_end, log, sbi::shutdown, sync::spin::SpinLock, warn};
+use control::TaskControlBlock;
+use lazy_static::lazy_static;
 
 /// The agreed-upon address where the first user app should be installed.
 const APP_BASE_PTR_0: *mut u8 = 0x8040_0000 as *mut u8;
@@ -17,6 +21,11 @@ static mut APP_KERNEL_STACK: [KernelStack; APP_MAX_NUMBER] =
 
 static mut APP_USER_STACK: [UserStack; APP_MAX_NUMBER] =
     [UserStack([0u8; USER_STACK_SIZE]); APP_MAX_NUMBER];
+
+lazy_static! {
+    static ref TASK_CONTROL_BLOCK: [SpinLock<TaskControlBlock>; APP_MAX_NUMBER] =
+        array::from_fn(|_| { SpinLock::new(TaskControlBlock::new_placeholder()) });
+}
 
 #[derive(Clone, Copy)]
 #[repr(align(4096))]
