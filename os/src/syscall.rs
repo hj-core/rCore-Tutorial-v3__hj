@@ -2,7 +2,7 @@ use core::{slice, str};
 
 use crate::{
     info, log, print, println,
-    task::{loader, runner},
+    task::{self, control::TaskState, loader, runner},
     warn,
 };
 
@@ -45,6 +45,8 @@ fn sys_write(fd: usize, buf: *const u8, count: usize) -> isize {
 }
 
 fn sys_exit(exit_code: isize) -> ! {
+    assert!(task::is_current_task_running());
+    task::change_current_task_state(TaskState::Exited);
     info!("Application exited with code {}", exit_code);
     runner::run_next_app()
 }
