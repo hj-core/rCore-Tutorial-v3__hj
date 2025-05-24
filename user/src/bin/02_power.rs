@@ -3,7 +3,7 @@
 
 extern crate user_lib;
 
-use user_lib::println;
+use user_lib::{println, yield_now};
 
 #[unsafe(no_mangle)]
 fn main() -> i32 {
@@ -25,6 +25,7 @@ fn main() -> i32 {
 
         if pow % 10_000 == 0 {
             println!("{}^{}={}(MOD {})", BASE, pow, value, MODULE);
+            yield_now();
         }
     }
     println!("Test power OK!");

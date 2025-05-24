@@ -3,10 +3,13 @@
 
 extern crate user_lib;
 
-use user_lib::println;
+use user_lib::{println, yield_now};
 
 #[unsafe(no_mangle)]
 fn main() -> i32 {
-    println!("Hello, world!");
+    for c in "hello world!!!!!".chars() {
+        println!("{}", c);
+        yield_now();
+    }
     0
 }
