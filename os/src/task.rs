@@ -1,3 +1,4 @@
+mod control;
 pub(crate) mod loader;
 pub(crate) mod runner;
 
