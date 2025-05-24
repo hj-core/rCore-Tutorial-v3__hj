@@ -3,7 +3,11 @@ use core::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-use crate::{debug, info, log, sbi::shutdown, trap::TrapContext};
+use crate::{
+    debug, info, log,
+    sbi::shutdown,
+    trap::{self, TrapContext},
+};
 
 use super::{KernelStack, loader};
 
@@ -47,10 +51,7 @@ fn run_app(app_index: usize) -> ! {
     let init_kernel_sp =
         unsafe { (KernelStack::get_upper_bound(app_index) as *mut TrapContext).offset(-1) };
 
-    unsafe extern "C" {
-        unsafe fn __restore(cx: usize);
-    }
-    unsafe { __restore(init_kernel_sp as usize) };
+    unsafe { trap::__restore(init_kernel_sp) };
 
     unreachable!()
 }

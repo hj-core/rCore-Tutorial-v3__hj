@@ -8,6 +8,10 @@ use crate::{log, syscall, task::runner, warn};
 
 global_asm!(include_str!("trap.S"));
 
+unsafe extern "C" {
+    pub(super) unsafe fn __restore(context: *mut TrapContext);
+}
+
 #[derive(Debug)]
 #[repr(C)]
 pub struct TrapContext {

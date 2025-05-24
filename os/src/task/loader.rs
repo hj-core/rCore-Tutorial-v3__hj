@@ -3,7 +3,7 @@ use core::{arch::asm, cmp::min, slice};
 use crate::{
     log,
     task::{KernelStack, UserStack},
-    trap::TrapContext,
+    trap::{self, TrapContext},
     warn,
 };
 
@@ -164,15 +164,11 @@ fn push_init_trap_context(app_index: usize) {
 fn set_first_run_tcb(app_index: usize) {
     let init_kernel_sp = KernelStack::get_upper_bound(app_index) - size_of::<TrapContext>();
 
-    unsafe extern "C" {
-        unsafe fn __restore(cx: usize);
-    }
-
     let mut tcb = TASK_CONTROL_BLOCK[app_index].lock();
     tcb.change_state(TaskState::Ready);
 
     let context = tcb.get_mut_context();
-    context.set_ra(__restore as usize);
+    context.set_ra(trap::__restore as usize);
     context.set_sp(init_kernel_sp);
 }
 
