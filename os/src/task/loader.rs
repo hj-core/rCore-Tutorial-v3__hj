@@ -2,12 +2,13 @@ use core::{arch::asm, cmp::min, slice};
 
 use crate::{
     log,
-    task::{KernelStack, UserStack},
+    task::{
+        APP_BASE_PTR_0, APP_MAX_NUMBER, APP_MAX_SIZE, KernelStack, TASK_CONTROL_BLOCK, UserStack,
+        control::TaskState,
+    },
     trap::{self, TrapContext},
     warn,
 };
-
-use super::{APP_BASE_PTR_0, APP_MAX_NUMBER, APP_MAX_SIZE, TASK_CONTROL_BLOCK, control::TaskState};
 
 /// The number of meta information items kept for each app.
 ///
@@ -157,7 +158,7 @@ fn push_init_trap_context(app_index: usize) {
     };
 }
 
-/// `prepare_first_run_tcb` configures the [TaskControlBlock] of the app for its first
+/// `set_first_run_tcb` configures the [TaskControlBlock] of the app for its first
 /// run.
 ///
 /// [TaskControlBlock]: super::control::TaskControlBlock
