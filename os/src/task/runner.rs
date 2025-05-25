@@ -26,7 +26,8 @@ pub(crate) fn get_recent_app_index() -> usize {
     RECENT_APP_INDEX.load(Ordering::Relaxed)
 }
 
-pub(super) fn run_first_app() -> ! {
+/// `init_and_run` starts running the apps from app 0.
+pub(super) fn init_and_run() -> ! {
     RECENT_APP_INDEX.store(APP_MAX_NUMBER, Ordering::Relaxed);
     run_app(0);
     unreachable!()

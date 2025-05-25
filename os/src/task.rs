@@ -82,7 +82,7 @@ pub fn start() -> ! {
 
     debug_print_tcb();
 
-    runner::run_first_app()
+    runner::init_and_run()
 }
 
 fn debug_print_tcb() {
