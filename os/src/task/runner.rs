@@ -7,10 +7,9 @@ use crate::{
     debug, info, log,
     sbi::shutdown,
     task::{
-        APP_MAX_NUMBER, TASK_CONTROL_BLOCK,
+        TASK_CONTROL_BLOCK, TASK_MAX_NUMBER,
         control::{TaskContext, TaskState},
-        debug_print_tcb,
-        loader::{get_app_name, get_total_apps},
+        debug_print_tcb, get_task_name, get_total_tasks,
     },
 };
 
@@ -19,66 +18,74 @@ unsafe extern "C" {
     unsafe fn __switch(curr_context: *mut TaskContext, next_context: *const TaskContext);
 }
 
-static RECENT_APP_INDEX: AtomicUsize = AtomicUsize::new(0);
+static RECENT_TASK_INDEX: AtomicUsize = AtomicUsize::new(0);
 
-/// `get_recent_app_index` returns the most recent index run by the runner.
-pub(crate) fn get_recent_app_index() -> usize {
-    RECENT_APP_INDEX.load(Ordering::Relaxed)
+/// `get_recent_task_index` returns the index of the most recent task.
+pub(crate) fn get_recent_task_index() -> usize {
+    RECENT_TASK_INDEX.load(Ordering::Relaxed)
 }
 
-/// `init_and_run` starts running the apps from app 0.
+/// `init_and_run` starts running the task from task 0.
 pub(super) fn init_and_run() -> ! {
-    RECENT_APP_INDEX.store(APP_MAX_NUMBER, Ordering::Relaxed);
-    run_app(0);
+    RECENT_TASK_INDEX.store(TASK_MAX_NUMBER, Ordering::Relaxed);
+    run_task(0);
     unreachable!()
 }
 
-pub(crate) fn run_next_app() {
-    if let Some(app_index) = find_next_app() {
-        run_app(app_index)
+/// `run_next_task` searches for and runs the next ready task starting from
+/// the task following the most recent one (wrapping around if necessary).
+pub(crate) fn run_next_task() {
+    if let Some(task_index) = find_next_task() {
+        run_task(task_index)
     } else {
         debug_print_tcb();
-        info!("No more apps to run, bye bye.");
+        info!("No more tasks to run, bye bye.");
         shutdown(false)
     }
 }
 
-fn find_next_app() -> Option<usize> {
-    let curr_index = get_recent_app_index();
-    let total_apps = get_total_apps();
+/// `find_next_task` searches for the next ready task starting from the task
+/// following the most recent one (wrapping around if necessary) and returns
+/// its index.
+fn find_next_task() -> Option<usize> {
+    let curr_index = get_recent_task_index();
+    let total_tasks = get_total_tasks();
 
-    ((curr_index + 1)..(curr_index + 1 + total_apps))
-        .map(|i| if i < total_apps { i } else { i - total_apps })
+    ((curr_index + 1)..(curr_index + 1 + total_tasks))
+        .map(|i| if i < total_tasks { i } else { i - total_tasks })
         .find(|&i| matches!(TASK_CONTROL_BLOCK[i].lock().get_state(), TaskState::Ready))
 }
 
-fn run_app(app_index: usize) {
+fn run_task(task_index: usize) {
     assert!(
-        app_index < get_total_apps(),
-        "Invalid app index {app_index}"
+        task_index < get_total_tasks(),
+        "Invalid task index {task_index}"
     );
 
-    let mut next_tcb = TASK_CONTROL_BLOCK[app_index].lock();
-    assert_eq!(
-        next_tcb.get_state(),
-        TaskState::Ready,
-        "Cannot run a non-ready app"
-    );
-    next_tcb.change_state(TaskState::Running);
-
-    let next_context = next_tcb.get_context() as *const TaskContext;
-    drop(next_tcb);
-
-    let curr_context = TASK_CONTROL_BLOCK[get_recent_app_index()]
+    let curr_context = TASK_CONTROL_BLOCK[get_recent_task_index()]
         .lock()
         .get_mut_context() as *mut TaskContext;
 
-    RECENT_APP_INDEX.store(app_index, Ordering::Relaxed);
+    let mut next_tcb = TASK_CONTROL_BLOCK[task_index].lock();
+    assert_eq!(
+        next_tcb.get_state(),
+        TaskState::Ready,
+        "Attempted to run a non-ready Task {{ index: {}, name: {} }}",
+        task_index,
+        get_task_name(task_index)
+    );
+
+    next_tcb.change_state(TaskState::Running);
+    let next_context = next_tcb.get_context() as *const TaskContext;
+    drop(next_tcb);
+
+    RECENT_TASK_INDEX.store(task_index, Ordering::Relaxed);
 
     let time = read_system_time_ms();
     debug!(
-        "{} starts at {}.{:03} seconds since system start",
-        get_app_name(app_index),
+        "Task {{ index: {}, name: {} }} starts at {}.{:03} seconds since system start",
+        task_index,
+        get_task_name(task_index),
         time / 1000,
         time % 1000,
     );

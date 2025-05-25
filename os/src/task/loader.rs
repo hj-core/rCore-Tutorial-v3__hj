@@ -1,15 +1,11 @@
 use core::{arch::asm, cmp::min, slice};
 
-use crate::{
-    kernel_end, log,
-    task::{APP_MAX_NUMBER, KernelStack, TASK_CONTROL_BLOCK, UserStack, control::TaskState},
-    trap::{self, TrapContext},
-    warn,
-};
+use crate::{kernel_end, log, warn};
 
 /// The agreed-upon address where the first user app should be installed.
-const APP_BASE_PTR_0: *mut u8 = 0x8040_0000 as *mut u8;
+const APP_ENTRY_PTR_0: *mut u8 = 0x8040_0000 as *mut u8;
 const APP_MAX_SIZE: usize = 0x2_0000;
+const APP_MAX_NUMBER: usize = super::TASK_MAX_NUMBER;
 
 /// The number of meta information items kept for each app.
 ///
@@ -82,16 +78,16 @@ pub(crate) fn get_app_data_end(app_index: usize) -> usize {
     }
 }
 
-/// `get_app_base_ptr` returns a pointer to the agreed-upon memory address
+/// `get_app_entry_ptr` returns a pointer to the agreed-upon memory address
 /// where the app should be installed.
-fn get_app_base_ptr(app_index: usize) -> *mut u8 {
-    unsafe { APP_BASE_PTR_0.add(app_index * APP_MAX_SIZE) }
+pub(super) fn get_app_entry_ptr(app_index: usize) -> *mut u8 {
+    unsafe { APP_ENTRY_PTR_0.add(app_index * APP_MAX_SIZE) }
 }
 
 /// `install_all_apps` copies the user apps (up to [APP_MAX_NUMBER]) to the
 /// designated memory addresses and returns the number of failed installations.
 pub(super) fn install_all_apps() -> usize {
-    if APP_BASE_PTR_0.addr() < kernel_end as usize {
+    if APP_ENTRY_PTR_0.addr() < kernel_end as usize {
         panic!("Kernel data extruded into the app-reserved addresses.");
     }
 
@@ -112,9 +108,6 @@ pub(super) fn install_all_apps() -> usize {
                 get_app_name(app_index)
             );
             result += 1;
-        } else {
-            push_init_trap_context(app_index);
-            set_first_run_tcb(app_index);
         }
     }
 
@@ -124,7 +117,7 @@ pub(super) fn install_all_apps() -> usize {
     result
 }
 
-/// `install_app` copies the app data to the designated memory addresses and
+/// `install_app_data` copies the app data to the designated memory addresses and
 /// returns the number of bytes copied.
 fn install_app_data(app_index: usize) -> usize {
     if app_index >= get_total_apps() {
@@ -140,71 +133,28 @@ fn install_app_data(app_index: usize) -> usize {
     }
 
     // Clear the reserved memory range
-    let app_base_ptr = get_app_base_ptr(app_index);
+    let app_entry_ptr = get_app_entry_ptr(app_index);
     for i in 0..APP_MAX_SIZE {
-        unsafe { app_base_ptr.add(i).write_volatile(0) };
+        unsafe { app_entry_ptr.add(i).write_volatile(0) };
     }
 
     // Copy the app data to the reserved memory range
     let app_data = unsafe { slice::from_raw_parts(app_data_start as *const u8, app_size) };
-    let dst = unsafe { slice::from_raw_parts_mut(app_base_ptr, app_size) };
+    let dst = unsafe { slice::from_raw_parts_mut(app_entry_ptr, app_size) };
     dst.copy_from_slice(app_data);
 
     app_size
 }
 
-/// `push_init_trap_context` pushes an initial trap context onto the app's kernel stack,
-/// to prepare for starting the app.
-fn push_init_trap_context(app_index: usize) {
-    let mut kernel_sp = KernelStack::get_upper_bound(app_index) as *mut TrapContext;
-    assert!(
-        kernel_sp.is_aligned(),
-        "Actions required to align the kernel_sp with TrapContext"
-    );
-
-    let app_base_addr = get_app_base_ptr(app_index).addr();
-    let init_context =
-        TrapContext::new_app_context(app_base_addr, UserStack::get_upper_bound(app_index));
-    unsafe {
-        kernel_sp = kernel_sp.offset(-1);
-        kernel_sp.write_volatile(init_context);
-    };
-}
-
-/// `set_first_run_tcb` configures the [TaskControlBlock] of the app for its first
-/// run.
-///
-/// [TaskControlBlock]: super::control::TaskControlBlock
-fn set_first_run_tcb(app_index: usize) {
-    let init_kernel_sp = KernelStack::get_upper_bound(app_index) - size_of::<TrapContext>();
-
-    let mut tcb = TASK_CONTROL_BLOCK[app_index].lock();
-    tcb.change_state(TaskState::Ready);
-
-    let context = tcb.get_mut_context();
-    context.set_ra(trap::__restore as usize);
-    context.set_sp(init_kernel_sp);
-}
-
-/// `can_app_read_addr` returns whether the address is readable by the currently running
-/// app. Clients should ensure that an app is indeed running; otherswis, the returned
-/// result is invalid.
-pub(crate) fn can_app_read_addr(app_index: usize, addr: usize) -> bool {
+/// `is_app_installed_data` returns whether the address is within the range of
+/// installed app data.
+pub(super) fn is_app_installed_data(app_index: usize, addr: usize) -> bool {
     let app_size = get_app_data_end(app_index) - get_app_data_start(app_index);
     if app_size == 0 {
         return false;
     }
 
-    let app_base_addr = get_app_base_ptr(app_index).addr();
-    let data_range = app_base_addr..(app_base_addr + app_size);
-    if data_range.contains(&addr) {
-        return true;
-    }
-
-    let stack_range = UserStack::get_lower_bound(app_index)..UserStack::get_upper_bound(app_index);
-    if stack_range.contains(&addr) {
-        return true;
-    }
-
-    false
+    let app_entry_addr = get_app_entry_ptr(app_index).addr();
+    let installed_range = app_entry_addr..(app_entry_addr + app_size);
+    installed_range.contains(&addr)
 }

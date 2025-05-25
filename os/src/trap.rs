@@ -6,13 +6,17 @@ use riscv::regs::{
 
 use crate::{
     log, syscall,
-    task::prelude::{TaskState, exchange_recent_task_state, run_next_app},
+    task::{
+        get_task_name,
+        prelude::{TaskState, exchange_recent_task_state, get_recent_task_index, run_next_task},
+    },
     warn,
 };
 
 global_asm!(include_str!("trap.S"));
 
 unsafe extern "C" {
+    // Defined in trap.S
     pub(super) unsafe fn __restore();
 }
 
@@ -24,18 +28,18 @@ pub struct TrapContext {
     /// Please note that the actual implementation may skip storing some
     /// register values; thus the values at those indices are invalid.
     x: [usize; 32],
-    #[allow(dead_code)]
     sstatus: usize,
     sepc: usize,
 }
 
 impl TrapContext {
-    pub fn new_app_context(app_entry_addr: usize, user_sp: usize) -> Self {
+    pub fn new_init_context(entry_addr: usize, user_sp: usize) -> Self {
         let sstatus = sstatus::set_spp_user();
+
         let mut result = Self {
             x: [0; 32],
             sstatus,
-            sepc: app_entry_addr,
+            sepc: entry_addr,
         };
         result.x[2] = user_sp;
         result
@@ -69,26 +73,42 @@ fn trap_handler(context: &mut TrapContext) -> &mut TrapContext {
             exchange_recent_task_state(TaskState::Running, TaskState::Killed)
                 .expect("Expected the current TaskState to be Running");
 
-            warn!("PageFault in application, kernel killed it.");
-            run_next_app();
+            let task_index = get_recent_task_index();
+            let taks_name = get_task_name(task_index);
+            warn!(
+                "Task {{ index: {}, name: {} }} PageFault , kernel killed it.",
+                task_index, taks_name
+            );
+            run_next_task();
         }
 
         Cause::IllegalInstruction => {
             exchange_recent_task_state(TaskState::Running, TaskState::Killed)
                 .expect("Expected the current TaskState to be Running");
 
-            warn!("IllegalInstruction in application, kernel killed it.");
-            run_next_app();
+            let task_index = get_recent_task_index();
+            let taks_name = get_task_name(task_index);
+            warn!(
+                "Task {{ index: {}, name: {} }} IllegalInstruction, kernel killed it.",
+                task_index, taks_name
+            );
+            run_next_task();
         }
 
         Cause::Unknown => {
+            let task_index = get_recent_task_index();
+            let task_name = get_task_name(task_index);
             panic!(
-                "Unknown trap, scause={scause_val:#x}, stval={stval_val:#x}, context={context:#?}"
+                "Task {{ index: {task_index}, name: {task_name} }} unknown trap, scause={scause_val:#x}, stval={stval_val:#x}, context={context:#?}"
             )
         }
 
         _ => {
-            panic!("Trap: {cause:?}, stval={stval_val:#x}, context={context:#x?}");
+            let task_index = get_recent_task_index();
+            let task_name = get_task_name(task_index);
+            panic!(
+                "Task {{ index: {task_index}, name: {task_name} }} unsupported trap {cause:?}, stval={stval_val:#x}, context={context:#x?}"
+            );
         }
     }
     context

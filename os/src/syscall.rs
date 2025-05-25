@@ -3,8 +3,8 @@ use core::{slice, str};
 use crate::{
     info, log, print, println,
     task::prelude::{
-        TaskState, can_app_read_addr, exchange_recent_task_state, get_app_name,
-        get_recent_app_index, run_next_app,
+        TaskState, can_task_read_addr, exchange_recent_task_state, get_recent_task_index,
+        get_task_name, run_next_task,
     },
     warn,
 };
@@ -28,19 +28,24 @@ pub fn syscall_handler(syscall_id: usize, args: [usize; 3]) -> isize {
 }
 
 fn sys_write(fd: usize, buf: *const u8, count: usize) -> isize {
+    let task_index = get_recent_task_index();
+    let task_name = get_task_name(task_index);
+
     if fd != FD_STDOUT {
         warn!(
-            "User attempts to write to unsupported file descriptor: {}",
-            fd
+            "Task {{ index: {}, name: {} }} attempted to write to unsupported file descriptor {}",
+            task_index, task_name, fd
         );
         return -1;
     }
 
-    let app_index = get_recent_app_index();
-    if !can_app_read_addr(app_index, buf.addr())
-        || !can_app_read_addr(app_index, buf.addr() + count - 1)
+    if !can_task_read_addr(task_index, buf.addr())
+        || !can_task_read_addr(task_index, buf.addr() + count - 1)
     {
-        warn!("User attempts to read a memory address without permission");
+        warn!(
+            "Task {{ index: {}, name: {} }} attempted to read a memory address without permission",
+            task_index, task_name
+        );
         return -1;
     }
 
@@ -51,29 +56,48 @@ fn sys_write(fd: usize, buf: *const u8, count: usize) -> isize {
 }
 
 fn sys_exit(exit_code: isize) -> isize {
-    exchange_recent_task_state(TaskState::Running, TaskState::Exited)
-        .expect("Expected the current TaskState to be Running");
+    let task_index = get_recent_task_index();
+    let task_name = get_task_name(task_index);
 
-    info!("Application exited with code {}", exit_code);
-    run_next_app();
+    let state = exchange_recent_task_state(TaskState::Running, TaskState::Exited);
+    if let Err(state) = state {
+        panic!(
+            "Task {{ index: {}, name: {} }} expected Running but got {:?}",
+            task_index, task_name, state
+        )
+    }
+
+    info!(
+        "Task {{ index: {}, name: {} }} exited with code {}",
+        task_index, task_name, exit_code
+    );
+    run_next_task();
     exit_code
 }
 
 fn sys_yield() -> isize {
-    exchange_recent_task_state(TaskState::Running, TaskState::Ready)
-        .expect("Expected the current TaskState to be Running");
+    let task_index = get_recent_task_index();
+    let task_name = get_task_name(task_index);
 
-    run_next_app();
+    let state = exchange_recent_task_state(TaskState::Running, TaskState::Ready);
+    if let Err(state) = state {
+        panic!(
+            "Task {{ index: {}, name: {} }} expected Running but got {:?}",
+            task_index, task_name, state
+        )
+    }
+
+    run_next_task();
     0
 }
 
 fn sys_task_info() -> isize {
-    let app_index = get_recent_app_index();
-    let app_name = get_app_name(app_index);
+    let task_index = get_recent_task_index();
+    let task_name = get_task_name(task_index);
 
     println!(
         "Running Task {{ index: {}, name: {} }}",
-        app_index, app_name
+        task_index, task_name
     );
     0
 }
