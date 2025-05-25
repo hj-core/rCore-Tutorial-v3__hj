@@ -19,17 +19,15 @@ unsafe extern "C" {
     unsafe fn __switch(curr_context: *mut TaskContext, next_context: *const TaskContext);
 }
 
-static CURRENT_APP_INDEX: AtomicUsize = AtomicUsize::new(0);
+static RECENT_APP_INDEX: AtomicUsize = AtomicUsize::new(0);
 
-/// `get_curr_app_index` returns the index of the currently running app.
-/// Clients should ensure that an app is indeed running; otherswis, the
-/// returned result is invalid.
-pub(crate) fn get_current_app_index() -> usize {
-    CURRENT_APP_INDEX.load(Ordering::Relaxed)
+/// `get_recent_app_index` returns the most recent index run by the runner.
+pub(crate) fn get_recent_app_index() -> usize {
+    RECENT_APP_INDEX.load(Ordering::Relaxed)
 }
 
 pub(super) fn run_first_app() -> ! {
-    CURRENT_APP_INDEX.store(APP_MAX_NUMBER, Ordering::Relaxed);
+    RECENT_APP_INDEX.store(APP_MAX_NUMBER, Ordering::Relaxed);
     run_app(0);
     unreachable!()
 }
@@ -45,7 +43,7 @@ pub(crate) fn run_next_app() {
 }
 
 fn find_next_app() -> Option<usize> {
-    let curr_index = get_current_app_index();
+    let curr_index = get_recent_app_index();
     let total_apps = get_total_apps();
 
     ((curr_index + 1)..(curr_index + 1 + total_apps))
@@ -70,11 +68,11 @@ fn run_app(app_index: usize) {
     let next_context = next_tcb.get_context() as *const TaskContext;
     drop(next_tcb);
 
-    let curr_context = TASK_CONTROL_BLOCK[get_current_app_index()]
+    let curr_context = TASK_CONTROL_BLOCK[get_recent_app_index()]
         .lock()
         .get_mut_context() as *mut TaskContext;
 
-    CURRENT_APP_INDEX.store(app_index, Ordering::Relaxed);
+    RECENT_APP_INDEX.store(app_index, Ordering::Relaxed);
 
     let time = read_system_time_ms();
     debug!(

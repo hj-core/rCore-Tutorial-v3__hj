@@ -97,19 +97,21 @@ fn debug_print_tcb() {
     }
 }
 
-/// `is_current_task_running` returns whether the current task is in the
-/// [TaskState::Running] state.
-pub(crate) fn is_current_task_running() -> bool {
+/// `is_recent_task_running` returns whether the most recent task run by the
+/// runner is in the [TaskState::Running] state.
+pub(crate) fn is_recent_task_running() -> bool {
     matches!(
-        TASK_CONTROL_BLOCK[runner::get_current_app_index()]
+        TASK_CONTROL_BLOCK[runner::get_recent_app_index()]
             .lock()
             .get_state(),
         TaskState::Running
     )
 }
 
-pub(crate) fn change_current_task_state(new_state: TaskState) {
-    TASK_CONTROL_BLOCK[runner::get_current_app_index()]
+/// `change_recent_task_state` changes the state of the most recent task run
+/// by the runner.
+pub(crate) fn change_recent_task_state(new_state: TaskState) {
+    TASK_CONTROL_BLOCK[runner::get_recent_app_index()]
         .lock()
         .change_state(new_state);
 }

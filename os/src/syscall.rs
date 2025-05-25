@@ -3,8 +3,8 @@ use core::{slice, str};
 use crate::{
     info, log, print, println,
     task::prelude::{
-        TaskState, can_app_read_addr, change_current_task_state, get_app_name,
-        get_current_app_index, is_current_task_running, run_next_app,
+        TaskState, can_app_read_addr, change_recent_task_state, get_app_name, get_recent_app_index,
+        is_recent_task_running, run_next_app,
     },
     warn,
 };
@@ -36,7 +36,7 @@ fn sys_write(fd: usize, buf: *const u8, count: usize) -> isize {
         return -1;
     }
 
-    let app_index = get_current_app_index();
+    let app_index = get_recent_app_index();
     if !can_app_read_addr(app_index, buf.addr())
         || !can_app_read_addr(app_index, buf.addr() + count - 1)
     {
@@ -51,8 +51,8 @@ fn sys_write(fd: usize, buf: *const u8, count: usize) -> isize {
 }
 
 fn sys_exit(exit_code: isize) -> isize {
-    assert!(is_current_task_running());
-    change_current_task_state(TaskState::Exited);
+    assert!(is_recent_task_running());
+    change_recent_task_state(TaskState::Exited);
 
     info!("Application exited with code {}", exit_code);
     run_next_app();
@@ -60,14 +60,14 @@ fn sys_exit(exit_code: isize) -> isize {
 }
 
 fn sys_yield() -> isize {
-    assert!(is_current_task_running());
-    change_current_task_state(TaskState::Ready);
+    assert!(is_recent_task_running());
+    change_recent_task_state(TaskState::Ready);
     run_next_app();
     0
 }
 
 fn sys_task_info() -> isize {
-    let app_index = get_current_app_index();
+    let app_index = get_recent_app_index();
     let app_name = get_app_name(app_index);
 
     println!(
