@@ -1,5 +1,4 @@
-pub(crate) use super::change_recent_task_state;
-pub(crate) use super::is_recent_task_running;
+pub(crate) use super::exchange_recent_task_state;
 
 pub(crate) use super::loader::can_app_read_addr;
 pub(crate) use super::loader::get_app_data_end;

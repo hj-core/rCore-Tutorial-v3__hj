@@ -3,8 +3,8 @@ use core::{slice, str};
 use crate::{
     info, log, print, println,
     task::prelude::{
-        TaskState, can_app_read_addr, change_recent_task_state, get_app_name, get_recent_app_index,
-        is_recent_task_running, run_next_app,
+        TaskState, can_app_read_addr, exchange_recent_task_state, get_app_name,
+        get_recent_app_index, run_next_app,
     },
     warn,
 };
@@ -51,8 +51,8 @@ fn sys_write(fd: usize, buf: *const u8, count: usize) -> isize {
 }
 
 fn sys_exit(exit_code: isize) -> isize {
-    assert!(is_recent_task_running());
-    change_recent_task_state(TaskState::Exited);
+    exchange_recent_task_state(TaskState::Running, TaskState::Exited)
+        .expect("Expected the current TaskState to be Running");
 
     info!("Application exited with code {}", exit_code);
     run_next_app();
@@ -60,8 +60,9 @@ fn sys_exit(exit_code: isize) -> isize {
 }
 
 fn sys_yield() -> isize {
-    assert!(is_recent_task_running());
-    change_recent_task_state(TaskState::Ready);
+    exchange_recent_task_state(TaskState::Running, TaskState::Ready)
+        .expect("Expected the current TaskState to be Running");
+
     run_next_app();
     0
 }

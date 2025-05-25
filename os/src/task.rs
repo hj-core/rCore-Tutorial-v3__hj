@@ -83,21 +83,22 @@ fn debug_print_tcb() {
     }
 }
 
-/// `is_recent_task_running` returns whether the most recent task run by the
-/// runner is in the [TaskState::Running] state.
-pub(crate) fn is_recent_task_running() -> bool {
-    matches!(
-        TASK_CONTROL_BLOCK[runner::get_recent_app_index()]
-            .lock()
-            .get_state(),
-        TaskState::Running
-    )
-}
+/// `exchange_recent_task_state` changes the state of the most recent task to
+/// `new` if the current state is the same as `expected`.
+///
+/// The return value is a [Result] indicating whether the change succeeded and
+/// contains the previous state.
+pub(crate) fn exchange_recent_task_state(
+    expected: TaskState,
+    new: TaskState,
+) -> Result<TaskState, TaskState> {
+    let mut tcb = TASK_CONTROL_BLOCK[runner::get_recent_app_index()].lock();
+    let state = tcb.get_state();
 
-/// `change_recent_task_state` changes the state of the most recent task run
-/// by the runner.
-pub(crate) fn change_recent_task_state(new_state: TaskState) {
-    TASK_CONTROL_BLOCK[runner::get_recent_app_index()]
-        .lock()
-        .change_state(new_state);
+    if state == expected {
+        tcb.change_state(new);
+        Ok(expected)
+    } else {
+        Err(state)
+    }
 }
