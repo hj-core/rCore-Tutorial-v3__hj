@@ -1,14 +1,15 @@
 use core::{arch::asm, cmp::min, slice};
 
 use crate::{
-    log,
-    task::{
-        APP_BASE_PTR_0, APP_MAX_NUMBER, APP_MAX_SIZE, KernelStack, TASK_CONTROL_BLOCK, UserStack,
-        control::TaskState,
-    },
+    kernel_end, log,
+    task::{APP_MAX_NUMBER, KernelStack, TASK_CONTROL_BLOCK, UserStack, control::TaskState},
     trap::{self, TrapContext},
     warn,
 };
+
+/// The agreed-upon address where the first user app should be installed.
+const APP_BASE_PTR_0: *mut u8 = 0x8040_0000 as *mut u8;
+const APP_MAX_SIZE: usize = 0x2_0000;
 
 /// The number of meta information items kept for each app.
 ///
@@ -87,9 +88,21 @@ fn get_app_base_ptr(app_index: usize) -> *mut u8 {
     unsafe { APP_BASE_PTR_0.add(app_index * APP_MAX_SIZE) }
 }
 
-/// `install_all_apps` copies all user app data to the agreed-upon memory
-/// addresses and returns the number of failed installations.
+/// `install_all_apps` copies the user apps (up to [APP_MAX_NUMBER]) to the
+/// designated memory addresses and returns the number of failed installations.
 pub(super) fn install_all_apps() -> usize {
+    if APP_BASE_PTR_0.addr() < kernel_end as usize {
+        panic!("Kernel data extruded into the app-reserved addresses.");
+    }
+
+    if APP_MAX_NUMBER < get_total_apps_found() {
+        warn!(
+            "{} user apps found. Supports up to {}; the rest are ignored.",
+            get_total_apps_found(),
+            APP_MAX_NUMBER,
+        );
+    }
+
     let mut result = 0;
     for app_index in 0..get_total_apps() {
         if install_app_data(app_index) == 0 {
@@ -111,7 +124,7 @@ pub(super) fn install_all_apps() -> usize {
     result
 }
 
-/// `install_app` copies the app data to the agreed-upon memory address and
+/// `install_app` copies the app data to the designated memory addresses and
 /// returns the number of bytes copied.
 fn install_app_data(app_index: usize) -> usize {
     if app_index >= get_total_apps() {

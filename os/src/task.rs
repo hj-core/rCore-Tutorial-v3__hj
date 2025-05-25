@@ -7,12 +7,12 @@ mod runner;
 use core::array;
 use lazy_static::lazy_static;
 
-use crate::{debug, error, kernel_end, log, sbi::shutdown, sync::spin::SpinLock, warn};
-use control::{TaskControlBlock, TaskState};
+use crate::{
+    debug, log,
+    sync::spin::SpinLock,
+    task::control::{TaskControlBlock, TaskState},
+};
 
-/// The agreed-upon address where the first user app should be installed.
-const APP_BASE_PTR_0: *mut u8 = 0x8040_0000 as *mut u8;
-const APP_MAX_SIZE: usize = 0x2_0000;
 const APP_MAX_NUMBER: usize = 8;
 
 const KERNEL_STACK_SIZE: usize = 0x2000; // 8KB
@@ -61,23 +61,9 @@ impl UserStack {
 }
 
 pub fn start() -> ! {
-    if APP_BASE_PTR_0.addr() < kernel_end as usize {
-        error!("Kernel data extruded into the app-reserved addresses.");
-        shutdown(true)
-    }
-
     let failed = loader::install_all_apps();
-    if failed > 0 {
-        error!("{} user apps failed to install.", failed);
-        shutdown(true)
-    }
-
-    if APP_MAX_NUMBER < loader::get_total_apps_found() {
-        warn!(
-            "{} user apps found. Supports up to {}; the rest are ignored.",
-            loader::get_total_apps_found(),
-            APP_MAX_NUMBER,
-        );
+    if 0 < failed {
+        panic!("{failed} user apps failed to install.");
     }
 
     debug_print_tcb();
