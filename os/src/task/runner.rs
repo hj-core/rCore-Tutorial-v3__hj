@@ -1,5 +1,5 @@
 use core::{
-    arch::{asm, global_asm},
+    arch::global_asm,
     sync::atomic::{AtomicUsize, Ordering},
 };
 
@@ -11,6 +11,7 @@ use crate::{
         control::{TaskContext, TaskState},
         debug_print_tcb, get_task_name, get_total_tasks,
     },
+    timer::read_time_ms,
 };
 
 global_asm!(include_str!("switch.S"));
@@ -81,7 +82,7 @@ fn run_task(task_index: usize) {
 
     RECENT_TASK_INDEX.store(task_index, Ordering::Relaxed);
 
-    let time = read_system_time_ms();
+    let time = read_time_ms();
     debug!(
         "Task {{ index: {}, name: {} }} starts at {}.{:03} seconds since system start",
         task_index,
@@ -91,13 +92,4 @@ fn run_task(task_index: usize) {
     );
 
     unsafe { __switch(curr_context, next_context) };
-}
-
-/// `read_system_time_ms` returns the time since system start in millisecond.
-fn read_system_time_ms() -> usize {
-    let mut ticks: usize;
-    unsafe { asm!("rdtime {}", out(reg) ticks) };
-
-    const TIMER_FREQ_MHZ: usize = 10;
-    ticks / (TIMER_FREQ_MHZ * 1_000)
 }
