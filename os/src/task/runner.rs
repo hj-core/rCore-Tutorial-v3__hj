@@ -11,7 +11,7 @@ use crate::{
         control::{TaskContext, TaskState},
         debug_print_tcb, get_task_name, get_total_tasks,
     },
-    timer::read_time_ms,
+    timer,
 };
 
 global_asm!(include_str!("switch.S"));
@@ -82,7 +82,7 @@ fn run_task(task_index: usize) {
 
     RECENT_TASK_INDEX.store(task_index, Ordering::Relaxed);
 
-    let time = read_time_ms();
+    let time = timer::read_time_ms();
     debug!(
         "Task {{ index: {}, name: {} }} starts at {}.{:03} seconds since system start",
         task_index,
@@ -91,5 +91,6 @@ fn run_task(task_index: usize) {
         time % 1000,
     );
 
+    timer::set_next_timer_interrupt();
     unsafe { __switch(curr_context, next_context) };
 }
