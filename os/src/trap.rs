@@ -5,7 +5,7 @@ use riscv::regs::{
 };
 
 use crate::{
-    log, syscall,
+    info, log, syscall,
     task::{
         get_task_name,
         prelude::{TaskState, exchange_recent_task_state, get_recent_task_index, run_next_task},
@@ -108,6 +108,14 @@ fn trap_handler(context: &mut TrapContext) -> &mut TrapContext {
                 "Task {{ index: {}, name: {} }} IllegalInstruction, kernel killed it.",
                 task_index, taks_name
             );
+            run_next_task();
+        }
+
+        Cause::SupervisorTimerInterrupt => {
+            info!("Caught a SupervisorTimerInterrupt");
+
+            exchange_recent_task_state(TaskState::Running, TaskState::Ready)
+                .expect("Expected the current TaskState to be Running");
             run_next_task();
         }
 
