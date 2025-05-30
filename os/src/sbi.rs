@@ -12,3 +12,7 @@ pub fn shutdown(is_failure: bool) -> ! {
     }
     unreachable!()
 }
+
+pub(super) fn set_mtimecmp(value: usize) {
+    sbi_rt::set_timer(value as _);
+}
