@@ -1,7 +1,7 @@
 use core::arch::global_asm;
 use riscv::regs::{
     scause::{self, Cause},
-    sstatus, stval, stvec,
+    sie, sstatus, stval, stvec,
 };
 
 use crate::{
@@ -50,8 +50,24 @@ pub fn init() {
     unsafe extern "C" {
         unsafe fn __stvec();
     }
+
     let stvec_ok = stvec::install(__stvec as usize, stvec::Mode::Direct);
     assert!(stvec_ok, "Failed to install stvec");
+
+    enable_interrupts();
+    enable_timer_interrupts();
+}
+
+/// `enable_interrupts` enables all interrupts in supervisor mode. This provides
+/// overall control over interrupt behavior.
+fn enable_interrupts() {
+    sstatus::set_sie();
+}
+
+/// `enable_timer_interrupts` enables the timer interrupts in supervisor mode.
+/// This provides fine control over interrupt behavior.
+fn enable_timer_interrupts() {
+    sie::set_stie();
 }
 
 #[unsafe(no_mangle)]
