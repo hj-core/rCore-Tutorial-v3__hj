@@ -44,7 +44,11 @@ impl TaskControlBlock {
 
         if self.statistics.get_first_run_start_mtime() == 0 {
             self.statistics.set_first_run_start_mtime(time);
+        } else {
+            let waiting_time = time - self.statistics.get_last_run_end_time();
+            self.statistics.increase_total_waiting_mtime(waiting_time);
         }
+
         self.statistics.set_last_run_start_mtime(time);
     }
 
@@ -104,6 +108,10 @@ pub(super) struct TaskStatistics {
     mtime_last_run_start: usize,
     mtime_last_run_end: usize,
     mtime_total_executed: usize,
+    /// The total waiting time of a task, accumulating from its first run.
+    /// A task is considered waiting if it is switched out before it is
+    /// completed.
+    mtime_total_waiting: usize,
     /// The number of times a task has been switched out, including the one
     /// when it is completed.
     switch_count: usize,
@@ -116,6 +124,7 @@ impl TaskStatistics {
             mtime_last_run_start: 0,
             mtime_last_run_end: 0,
             mtime_total_executed: 0,
+            mtime_total_waiting: 0,
             switch_count: 0,
         }
     }
@@ -140,8 +149,16 @@ impl TaskStatistics {
         self.mtime_last_run_end = value;
     }
 
+    fn get_last_run_end_time(&self) -> usize {
+        self.mtime_last_run_end
+    }
+
     fn increase_total_executed_mtime(&mut self, value: usize) {
         self.mtime_total_executed += value;
+    }
+
+    fn increase_total_waiting_mtime(&mut self, value: usize) {
+        self.mtime_total_waiting += value;
     }
 
     fn increase_switch_count(&mut self) {
