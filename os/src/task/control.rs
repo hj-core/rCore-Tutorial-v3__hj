@@ -49,13 +49,16 @@ impl TaskControlBlock {
     }
 
     /// `record_run_end` records the current mtime as the task's last
-    /// run end time and update the total executed time.
+    /// run end time, and updates the total executed time and the switch
+    /// count.
     pub(super) fn record_run_end(&mut self) {
         let time = timer::read_time();
         self.statistics.set_last_run_end_mtime(time);
 
         let executed_time = time - self.statistics.get_last_run_start_mtime();
         self.statistics.increase_total_executed_mtime(executed_time);
+
+        self.statistics.increase_switch_count();
     }
 }
 
@@ -101,6 +104,9 @@ pub(super) struct TaskStatistics {
     mtime_last_run_start: usize,
     mtime_last_run_end: usize,
     mtime_total_executed: usize,
+    /// The number of times a task has been switched out, including the one
+    /// when it is completed.
+    switch_count: usize,
 }
 
 impl TaskStatistics {
@@ -110,6 +116,7 @@ impl TaskStatistics {
             mtime_last_run_start: 0,
             mtime_last_run_end: 0,
             mtime_total_executed: 0,
+            switch_count: 0,
         }
     }
 
@@ -135,5 +142,9 @@ impl TaskStatistics {
 
     fn increase_total_executed_mtime(&mut self, value: usize) {
         self.mtime_total_executed += value;
+    }
+
+    fn increase_switch_count(&mut self) {
+        self.switch_count += 1;
     }
 }
