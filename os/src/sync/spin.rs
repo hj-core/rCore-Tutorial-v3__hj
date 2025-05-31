@@ -2,7 +2,7 @@
 
 use core::{
     cell::UnsafeCell,
-    hint,
+    fmt, hint,
     ops::{Deref, DerefMut},
     sync::atomic::{AtomicBool, Ordering},
 };
@@ -61,5 +61,14 @@ impl<T> DerefMut for SpinGuard<'_, T> {
 impl<T> Drop for SpinGuard<'_, T> {
     fn drop(&mut self) {
         self.lock.unlock();
+    }
+}
+
+impl<T> fmt::Debug for SpinGuard<'_, T>
+where
+    T: fmt::Debug,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        (self.deref()).fmt(f)
     }
 }
