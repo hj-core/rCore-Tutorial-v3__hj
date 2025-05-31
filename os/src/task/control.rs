@@ -1,5 +1,7 @@
 use crate::timer;
 
+pub(super) const MAX_SYSCALLS_TRACKED: usize = 6;
+
 #[derive(Debug)]
 pub(super) struct TaskControlBlock {
     state: TaskState,
@@ -60,6 +62,12 @@ impl TaskControlBlock {
 
         self.statistics.increase_switch_count();
     }
+
+    /// `record_syscall` records a call to the given syscall_id for the task.
+    /// This function has the same semantics as [TaskStatistics::increase_syscall_count].
+    pub(super) fn record_syscall(&mut self, syscall_id: usize) -> bool {
+        self.statistics.increase_syscall_count(syscall_id)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -111,6 +119,9 @@ struct TaskStatistics {
     /// The number of times a task has been switched out, including the one
     /// when it is completed.
     switch_count: usize,
+    /// The (syscall_id, called_times) statistics of a task. Can only track
+    /// up to [MAX_SYSCALL_TRACKED] different syscalls.
+    syscall_counts: [(usize, usize); MAX_SYSCALLS_TRACKED],
 }
 
 impl TaskStatistics {
@@ -122,6 +133,7 @@ impl TaskStatistics {
             mtime_total_executed: 0,
             mtime_total_waiting: 0,
             switch_count: 0,
+            syscall_counts: [(0, 0); MAX_SYSCALLS_TRACKED],
         }
     }
 
@@ -159,5 +171,21 @@ impl TaskStatistics {
 
     fn increase_switch_count(&mut self) {
         self.switch_count += 1;
+    }
+
+    /// `increase_syscall_count` increases the count for the given syscall_id,
+    /// which may fail since only the first [MAX_SYSCALLS_TRACKED] different
+    /// syscalls are tracked. It returns a boolean indicating whether the call
+    /// has been recorded.
+    fn increase_syscall_count(&mut self, syscall_id: usize) -> bool {
+        if let Some(i) = (0..MAX_SYSCALLS_TRACKED)
+            .find(|&i| self.syscall_counts[i].0 == syscall_id || self.syscall_counts[i].0 == 0)
+        {
+            self.syscall_counts[i].0 = syscall_id;
+            self.syscall_counts[i].1 += 1;
+            true
+        } else {
+            false
+        }
     }
 }

@@ -171,3 +171,15 @@ pub(crate) fn exchange_recent_task_state(
         Err(state)
     }
 }
+
+/// `record_syscall_for_recent_task` records a call to the syscall for the
+/// recent task, which may fail since only the first [MAX_SYSCALLS_TRACKED]
+/// different syscalls are tracked. It returns a boolean indicating whether
+/// the call has been recorded.
+///
+/// [MAX_SYSCALLS_TRACKED]: control::MAX_SYSCALLS_TRACKED
+pub(crate) fn record_syscall_for_recent_task(syscall_id: usize) -> bool {
+    TASK_CONTROL_BLOCK[runner::get_recent_task_index()]
+        .lock()
+        .record_syscall(syscall_id)
+}

@@ -1,6 +1,7 @@
 pub(crate) use super::can_task_read_addr;
 pub(crate) use super::exchange_recent_task_state;
 pub(crate) use super::get_task_name;
+pub(crate) use super::record_syscall_for_recent_task;
 
 pub(crate) use super::loader::get_app_data_end;
 pub(crate) use super::loader::get_app_data_start;

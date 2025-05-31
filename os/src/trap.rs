@@ -6,9 +6,9 @@ use riscv::regs::{
 
 use crate::{
     info, log, syscall,
-    task::{
-        get_task_name,
-        prelude::{TaskState, exchange_recent_task_state, get_recent_task_index, run_next_task},
+    task::prelude::{
+        TaskState, exchange_recent_task_state, get_recent_task_index, get_task_name,
+        record_syscall_for_recent_task, run_next_task,
     },
     warn,
 };
@@ -78,11 +78,13 @@ fn trap_handler(context: &mut TrapContext) -> &mut TrapContext {
 
     match cause {
         Cause::UserEnvironmentCall => {
+            let syscall_id = context.x[17];
+            record_syscall_for_recent_task(syscall_id);
+
             context.sepc += 4;
-            context.x[10] = syscall::syscall_handler(
-                context.x[17],
-                [context.x[10], context.x[11], context.x[12]],
-            ) as usize;
+            context.x[10] =
+                syscall::syscall_handler(syscall_id, [context.x[10], context.x[11], context.x[12]])
+                    as usize;
         }
 
         Cause::StoreOrAmoAccessFault | Cause::StoreOrAmoPageFault => {
