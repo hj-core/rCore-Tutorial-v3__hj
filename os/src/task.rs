@@ -138,13 +138,7 @@ fn set_first_run_tcb(task_index: usize) {
 fn debug_print_tcb() {
     for i in 0..TASK_MAX_NUMBER {
         let tcb = TASK_CONTROL_BLOCK[i].lock();
-        debug!(
-            "TCB {}:\nstate = {:?},\ncontext = {:#x?},\nstatistics = {:#?}",
-            i,
-            tcb.get_state(),
-            tcb.get_context(),
-            tcb.get_statistics(),
-        );
+        debug!("TCB {}: {:#?}", i, tcb);
     }
 }
 
