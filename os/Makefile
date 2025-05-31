@@ -58,9 +58,17 @@ run: build
 debug: build
 	@tmux new-session -d \
 	"$(QEMU) $(QEMU_ARGS) -s -S" && \
-	tmux split-window -v "$(GDB) $(GDB_ARGS)" && \
+	tmux split-window -h "$(GDB) $(GDB_ARGS)" && \
 	tmux -2 attach-session -d
 .PHONY: debug
+
+gdbc:
+	@$(GDB) $(GDB_ARGS)
+.PHONY: gdbc
+
+gdbs: build
+	@$(QEMU) $(QEMU_ARGS) -s -S
+.PHONY: gdbs
 
 disasm: build
 	@$(OBJDUMP) $(OBJDUMP_ARGS) $(KERNEL_ELF) > $(OBJDUMP_TMP)
