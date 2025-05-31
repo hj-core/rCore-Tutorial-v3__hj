@@ -1,7 +1,10 @@
+use crate::timer;
+
 #[derive(Debug)]
 pub(super) struct TaskControlBlock {
     state: TaskState,
     context: TaskContext,
+    statistics: TaskStatistics,
 }
 
 impl TaskControlBlock {
@@ -9,6 +12,7 @@ impl TaskControlBlock {
         Self {
             state: TaskState::Unused,
             context: TaskContext::new_placeholder(),
+            statistics: TaskStatistics::new_init(),
         }
     }
 
@@ -26,6 +30,20 @@ impl TaskControlBlock {
 
     pub(super) fn get_mut_context(&mut self) -> &mut TaskContext {
         &mut self.context
+    }
+
+    pub(super) fn get_statistics(&self) -> &TaskStatistics {
+        &self.statistics
+    }
+
+    /// `record_first_run_start` records the current mtime as the start
+    /// time of the task's first run. It is a no-op if the task has been
+    /// run previously.
+    pub(super) fn record_first_run_start(&mut self) {
+        let time = timer::read_time();
+        if self.statistics.get_first_run_start_mtime() == 0 {
+            self.statistics.set_first_run_start_mtime(time);
+        }
     }
 }
 
@@ -62,5 +80,26 @@ impl TaskContext {
 
     pub(super) fn set_sp(&mut self, value: usize) {
         self.sp = value;
+    }
+}
+
+#[derive(Debug)]
+pub(super) struct TaskStatistics {
+    mtime_first_run_start: usize,
+}
+
+impl TaskStatistics {
+    fn new_init() -> Self {
+        Self {
+            mtime_first_run_start: 0,
+        }
+    }
+
+    fn set_first_run_start_mtime(&mut self, value: usize) {
+        self.mtime_first_run_start = value;
+    }
+
+    fn get_first_run_start_mtime(&self) -> usize {
+        self.mtime_first_run_start
     }
 }

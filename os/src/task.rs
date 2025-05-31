@@ -139,10 +139,11 @@ fn debug_print_tcb() {
     for i in 0..TASK_MAX_NUMBER {
         let tcb = TASK_CONTROL_BLOCK[i].lock();
         debug!(
-            "tcb {}: state={:?}, context={:#x?}",
+            "TCB {}:\nstate = {:?},\ncontext = {:#x?},\nstatistics = {:#?}",
             i,
             tcb.get_state(),
-            tcb.get_context()
+            tcb.get_context(),
+            tcb.get_statistics(),
         );
     }
 }

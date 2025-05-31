@@ -78,7 +78,6 @@ fn run_task(task_index: usize) {
 
     next_tcb.change_state(TaskState::Running);
     let next_context = next_tcb.get_context() as *const TaskContext;
-    drop(next_tcb);
 
     RECENT_TASK_INDEX.store(task_index, Ordering::Relaxed);
 
@@ -91,6 +90,8 @@ fn run_task(task_index: usize) {
         time % 1000,
     );
 
+    next_tcb.record_first_run_start();
+    drop(next_tcb);
     timer::set_next_timer_interrupt();
     unsafe { __switch(curr_context, next_context) };
 }
