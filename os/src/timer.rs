@@ -10,7 +10,7 @@ pub(super) fn read_time_ms() -> usize {
 }
 
 /// `read_time` returns the current value of the time counter.
-fn read_time() -> usize {
+pub(super) fn read_time() -> usize {
     let mut result: usize;
     unsafe { asm!("rdtime {}", lateout(reg) result) };
     result
