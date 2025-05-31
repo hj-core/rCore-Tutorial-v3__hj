@@ -36,6 +36,10 @@ pub(super) fn init_and_run() -> ! {
 /// `run_next_task` searches for and runs the next ready task starting from
 /// the task following the most recent one (wrapping around if necessary).
 pub(crate) fn run_next_task() {
+    TASK_CONTROL_BLOCK[get_recent_task_index()]
+        .lock()
+        .record_run_end();
+
     if let Some(task_index) = find_next_task() {
         run_task(task_index)
     } else {

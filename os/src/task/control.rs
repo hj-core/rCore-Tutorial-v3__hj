@@ -47,6 +47,13 @@ impl TaskControlBlock {
         }
         self.statistics.set_last_run_start_mtime(time);
     }
+
+    /// `record_run_end` records the current mtime as the task's last
+    /// run end time.
+    pub(super) fn record_run_end(&mut self) {
+        let time = timer::read_time();
+        self.statistics.set_last_run_end_mtime(time);
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -89,6 +96,7 @@ impl TaskContext {
 pub(super) struct TaskStatistics {
     mtime_first_run_start: usize,
     mtime_last_run_start: usize,
+    mtime_last_run_end: usize,
 }
 
 impl TaskStatistics {
@@ -96,6 +104,7 @@ impl TaskStatistics {
         Self {
             mtime_first_run_start: 0,
             mtime_last_run_start: 0,
+            mtime_last_run_end: 0,
         }
     }
 
@@ -109,5 +118,9 @@ impl TaskStatistics {
 
     fn set_last_run_start_mtime(&mut self, value: usize) {
         self.mtime_last_run_start = value;
+    }
+
+    fn set_last_run_end_mtime(&mut self, value: usize) {
+        self.mtime_last_run_end = value;
     }
 }
