@@ -6,6 +6,7 @@ mod syscall;
 pub mod task;
 
 use syscall::{sys_exit, sys_task_info, sys_write, sys_yield};
+use task::TaskInfo;
 
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".text.entry")]
@@ -41,6 +42,6 @@ pub fn yield_now() -> isize {
     sys_yield()
 }
 
-pub fn get_task_info() -> isize {
-    sys_task_info()
+pub fn get_task_info(task_id: usize, data: *mut TaskInfo) -> isize {
+    sys_task_info(task_id, data)
 }

@@ -1,5 +1,7 @@
 use core::arch::asm;
 
+use crate::task::TaskInfo;
+
 const SYSCALL_WRITE: usize = 64;
 const SYSCALL_EXIT: usize = 93;
 const SYSCALL_YIELD: usize = 124;
@@ -19,18 +21,18 @@ fn syscall(id: usize, args: [usize; 3]) -> isize {
     result
 }
 
-pub fn sys_write(fd: usize, buffer: &[u8]) -> isize {
+pub(super) fn sys_write(fd: usize, buffer: &[u8]) -> isize {
     syscall(SYSCALL_WRITE, [fd, buffer.as_ptr() as usize, buffer.len()])
 }
 
-pub fn sys_exit(xstate: i32) -> isize {
+pub(super) fn sys_exit(xstate: i32) -> isize {
     syscall(SYSCALL_EXIT, [xstate as usize, 0, 0])
 }
 
-pub fn sys_yield() -> isize {
+pub(super) fn sys_yield() -> isize {
     syscall(SYSCALL_YIELD, [0, 0, 0])
 }
 
-pub fn sys_task_info() -> isize {
-    syscall(SYSCALL_TASK_INFO, [0, 0, 0])
+pub(super) fn sys_task_info(task_id: usize, data: *mut TaskInfo) -> isize {
+    syscall(SYSCALL_TASK_INFO, [task_id, data.addr(), 0])
 }
