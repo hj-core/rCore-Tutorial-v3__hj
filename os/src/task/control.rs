@@ -34,6 +34,10 @@ impl TaskControlBlock {
         &mut self.context
     }
 
+    pub(super) fn get_statistics(&self) -> TaskStatistics {
+        self.statistics
+    }
+
     /// `record_run_start` records the current mtime as the task's last
     /// run start time. It additionally sets the task's first run start
     /// time if it is the first run of the task.

@@ -10,7 +10,7 @@ use lazy_static::lazy_static;
 use crate::{
     debug, log,
     sync::spin::SpinLock,
-    task::control::{TaskControlBlock, TaskState},
+    task::control::{TaskControlBlock, TaskState, TaskStatistics},
     trap::{self, TrapContext},
 };
 
@@ -182,4 +182,21 @@ pub(crate) fn record_syscall_for_recent_task(syscall_id: usize) -> bool {
     TASK_CONTROL_BLOCK[runner::get_recent_task_index()]
         .lock()
         .record_syscall(syscall_id)
+}
+
+pub(crate) fn get_task_info(task_index: usize) -> TaskInfo {
+    let task_index = min(task_index, TASK_MAX_NUMBER);
+    let tcb = TASK_CONTROL_BLOCK[task_index].lock();
+    TaskInfo {
+        task_id: task_index,
+        state: tcb.get_state(),
+        stastics: tcb.get_statistics(),
+    }
+}
+
+#[allow(dead_code)]
+pub(crate) struct TaskInfo {
+    task_id: usize,
+    state: TaskState,
+    stastics: TaskStatistics,
 }
