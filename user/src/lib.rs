@@ -3,6 +3,7 @@
 pub mod console;
 mod lang_items;
 mod syscall;
+pub mod task;
 
 use syscall::{sys_exit, sys_task_info, sys_write, sys_yield};
 
