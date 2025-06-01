@@ -106,8 +106,8 @@ impl TaskContext {
     }
 }
 
-#[derive(Debug)]
-struct TaskStatistics {
+#[derive(Debug, Clone, Copy)]
+pub(super) struct TaskStatistics {
     mtime_first_run_start: usize,
     mtime_last_run_start: usize,
     mtime_last_run_end: usize,
