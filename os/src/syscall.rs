@@ -1,10 +1,10 @@
 use core::{slice, str};
 
 use crate::{
-    info, log, print, println,
+    info, log, print,
     task::prelude::{
-        TaskState, can_task_read_addr, exchange_recent_task_state, get_recent_task_index,
-        get_task_name, run_next_task,
+        TaskInfo, TaskState, can_task_read_addr, exchange_recent_task_state, get_recent_task_index,
+        get_task_info, get_task_name, run_next_task,
     },
     warn,
 };
@@ -22,7 +22,7 @@ pub fn syscall_handler(syscall_id: usize, args: [usize; 3]) -> isize {
         SYSCALL_WRITE => sys_write(args[0], args[1] as *const u8, args[2]),
         SYSCALL_EXIT => sys_exit(args[0] as isize),
         SYSCALL_YIELD => sys_yield(),
-        SYSCALL_TASK_INFO => sys_task_info(),
+        SYSCALL_TASK_INFO => sys_task_info(args[0], args[1] as *mut TaskInfo),
         _ => panic!("Unknown syscall, id={syscall_id}, args={args:?}"),
     }
 }
@@ -91,13 +91,21 @@ fn sys_yield() -> isize {
     0
 }
 
-fn sys_task_info() -> isize {
-    let task_index = get_recent_task_index();
-    let task_name = get_task_name(task_index);
+fn sys_task_info(task_index: usize, data: *mut TaskInfo) -> isize {
+    let curr_task_index = get_recent_task_index();
 
-    println!(
-        "Running Task {{ index: {}, name: {} }}",
-        task_index, task_name
-    );
+    if !can_task_read_addr(curr_task_index, data.addr())
+        || !can_task_read_addr(curr_task_index, data.addr() + size_of::<TaskInfo>() - 1)
+    {
+        warn!(
+            "Task {{ index: {}, name: {} }} attempted to read a memory address without permission",
+            curr_task_index,
+            get_task_name(curr_task_index)
+        );
+        return -1;
+    }
+
+    let task_info = get_task_info(task_index);
+    unsafe { data.write(task_info) }
     0
 }
