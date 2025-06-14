@@ -1,7 +1,7 @@
 use core::{arch::asm, cmp::min, slice};
 
 use crate::mm::prelude as mm_p;
-use crate::{log, warn};
+use crate::{debug, log, warn};
 
 /// The agreed-upon address where the first user app should be installed.
 const APP_ENTRY_PTR_0: *mut u8 = 0x8040_0000 as *mut u8;
@@ -32,14 +32,14 @@ pub(crate) fn get_total_apps() -> usize {
 
 /// `get_total_apps_found` returns the total number of user apps found.
 /// This value may be greater than [APP_MAX_NUMBER].
-pub(super) fn get_total_apps_found() -> usize {
+fn get_total_apps_found() -> usize {
     unsafe { get_info_base_ptr().read() as usize }
 }
 
 /// `get_app_name` returns the name of the app, or an empty string if the
 /// app index is invalid or the app name is invalid. Only ASCII characters
 /// are supported.
-pub(crate) fn get_app_name<'a>(app_index: usize) -> &'a str {
+pub(super) fn get_app_name<'a>(app_index: usize) -> &'a str {
     if app_index >= get_total_apps() {
         return "";
     }
@@ -55,7 +55,7 @@ pub(crate) fn get_app_name<'a>(app_index: usize) -> &'a str {
 
 /// `get_app_data_start` returns the starting address of the app data
 /// in the data section.
-pub(crate) fn get_app_data_start(app_index: usize) -> usize {
+fn get_app_data_start(app_index: usize) -> usize {
     if app_index >= get_total_apps() {
         return 0;
     }
@@ -68,7 +68,7 @@ pub(crate) fn get_app_data_start(app_index: usize) -> usize {
 
 /// `get_app_data_end` returns the end address (exclusive) of the app
 /// data in the data section.
-pub(crate) fn get_app_data_end(app_index: usize) -> usize {
+fn get_app_data_end(app_index: usize) -> usize {
     if app_index >= get_total_apps() {
         return 0;
     }
@@ -158,4 +158,20 @@ pub(super) fn is_app_installed_data(app_index: usize, addr: usize) -> bool {
     let app_entry_addr = get_app_entry_ptr(app_index).addr();
     let installed_range = app_entry_addr..(app_entry_addr + app_size);
     installed_range.contains(&addr)
+}
+
+pub(crate) fn log_apps_layout() {
+    let total_apps = get_total_apps();
+
+    for i in 0..total_apps {
+        let app_start = get_app_data_start(i);
+        let app_end = get_app_data_end(i);
+        let app_size = app_end - app_start;
+        let app_name = get_app_name(i);
+
+        debug!(
+            "app_{} [{:#x}, {:#x}) size={}, name={}",
+            i, app_start, app_end, app_size, app_name
+        );
+    }
 }
