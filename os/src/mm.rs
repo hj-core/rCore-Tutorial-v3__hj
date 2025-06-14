@@ -1,3 +1,4 @@
+mod heap_alloc;
 pub mod prelude;
 
 use crate::{debug, error, info, log, trace, warn};
@@ -21,7 +22,13 @@ pub(crate) fn get_kernel_end() -> usize {
     kernel_end as usize
 }
 
-pub(crate) fn clear_bss() {
+pub(crate) fn init() {
+    clear_bss();
+    log_kernel_layout();
+    heap_alloc::init();
+}
+
+fn clear_bss() {
     (bss_start as usize..bss_end as usize).for_each(|a| {
         unsafe { (a as *mut u8).write_volatile(0) };
     });

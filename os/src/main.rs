@@ -22,7 +22,7 @@ global_asm!(include_str!("link_apps.S"));
 
 #[unsafe(no_mangle)]
 pub fn rust_main() -> ! {
-    mm_p::clear_bss();
+    mm_p::init();
 
     log::init();
     mm_p::log_kernel_layout();
