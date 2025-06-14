@@ -1,6 +1,7 @@
 use core::{arch::asm, cmp::min, slice};
 
-use crate::{kernel_end, log, warn};
+use crate::mm::prelude as mm_p;
+use crate::{log, warn};
 
 /// The agreed-upon address where the first user app should be installed.
 const APP_ENTRY_PTR_0: *mut u8 = 0x8040_0000 as *mut u8;
@@ -87,7 +88,7 @@ pub(super) fn get_app_entry_ptr(app_index: usize) -> *mut u8 {
 /// `install_all_apps` copies the user apps (up to [APP_MAX_NUMBER]) to the
 /// designated memory addresses and returns the number of failed installations.
 pub(super) fn install_all_apps() -> usize {
-    if APP_ENTRY_PTR_0.addr() < kernel_end as usize {
+    if APP_ENTRY_PTR_0.addr() < mm_p::get_kernel_end() {
         panic!("Kernel data extruded into the app-reserved addresses.");
     }
 
