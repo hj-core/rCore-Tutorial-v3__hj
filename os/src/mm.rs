@@ -1,4 +1,5 @@
 mod heap_alloc;
+mod page_alloc;
 pub mod prelude;
 
 use crate::{debug, error, info, log, trace, warn};
