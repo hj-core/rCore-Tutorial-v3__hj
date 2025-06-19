@@ -9,15 +9,16 @@ use lazy_static::lazy_static;
 use crate::mm::get_kernel_end;
 use crate::sync::spin::SpinLock;
 
-static PHYS_MEM_START: usize = 0x8000_0000;
-static PHYS_MEM_BYTES: usize = 128 * 1024 * 1024; // 128 MB
+pub(super) static PHYS_MEM_START: usize = 0x8000_0000;
+pub(super) static PHYS_MEM_BYTES: usize = 128 * 1024 * 1024; // 128 MB
 
-static PAGE_SIZE_ORDER: usize = 12;
-static PAGE_SIZE_BYTES: usize = 1 << PAGE_SIZE_ORDER; // 4 KB
+pub(super) static PAGE_SIZE_ORDER: usize = 12;
+pub(super) static PAGE_SIZE_BYTES: usize = 1 << PAGE_SIZE_ORDER; // 4 KB
 
 lazy_static! {
     /// Global allocator for physical memory pages. Pages before
-    /// [PHYS_MEM_START] are considered allocated.
+    /// the end of kernel are treated as persistently allocated and
+    /// will not be recycled.
     ///
     /// # Invariants
     /// * Access to pages that are not yet allocated or have been
@@ -65,7 +66,7 @@ fn alloc_page() -> Option<Page> {
 /// [None].
 ///
 /// The allocated [Page] is zerod.
-fn alloc_zeroed_page() -> Option<Page> {
+pub(super) fn alloc_zeroed_page() -> Option<Page> {
     let mut result = alloc_page()?;
     unsafe {
         // SAFETY: According to the invariants of [PAGE_ALLOCATOR],
@@ -119,12 +120,13 @@ impl PageAllocator {
 ///
 /// # Invariants
 /// * Instance of [Page] should only be created by [PAGE_ALLOCATOR].
-struct Page {
+#[derive(Debug)]
+pub(super) struct Page {
     ppn: PPN,
 }
 
 impl Page {
-    fn get_ppn(&self) -> PPN {
+    pub(super) fn get_ppn(&self) -> PPN {
         self.ppn
     }
 
@@ -147,7 +149,7 @@ impl Drop for Page {
 
 /// Physical Page Number
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-struct PPN(usize);
+pub(super) struct PPN(pub(super) usize);
 
 impl PPN {
     fn from_addr(addr: usize) -> Self {
