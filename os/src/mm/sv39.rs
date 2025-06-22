@@ -58,7 +58,8 @@ fn parse_virtual_addr(va: usize) -> Result<[usize; 4], PgtError> {
 ///
 /// * Any valid non-leaf [PTE] in a page table must point to a
 /// physical page holding the [PTE]s of a page table.
-struct RootPgt {
+#[derive(Debug)]
+pub(super) struct RootPgt {
     /// The physical page number (in Sv39) of the physical page
     /// backing the [PTE]s of the [RootPgt].
     ppn: usize,
@@ -70,7 +71,7 @@ struct RootPgt {
 impl RootPgt {
     /// Creates a new [RootPgt] or returns the corresponding
     /// [PgtError].
-    fn new() -> Result<Self, PgtError> {
+    pub(super) fn new() -> Result<Self, PgtError> {
         let page = acquire_zeroed_page()?;
 
         let pa = page.get_physical_addr();
@@ -104,7 +105,12 @@ impl RootPgt {
     /// page tables.
     ///
     /// If an error occurred, it returns the corresponding [PgtError].
-    fn map_create(&mut self, va: usize, pa: usize, pte_flags: usize) -> Result<bool, PgtError> {
+    pub(super) fn map_create(
+        &mut self,
+        va: usize,
+        pa: usize,
+        pte_flags: usize,
+    ) -> Result<bool, PgtError> {
         let va = parse_virtual_addr(va)?;
         let leaf_pte = PTE::new(pa, pte_flags)?;
 
@@ -145,16 +151,16 @@ impl RootPgt {
 // Page Table Entry
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
-struct PTE(usize);
+pub(super) struct PTE(usize);
 
 impl PTE {
     // The N and PBMT flags are excluded since Svnapot extension is
     // not implemented.
     const ALL_FLAGS: usize = 0x3ff;
-    const FLAG_V: usize = 1 << 0;
-    const FLAG_R: usize = 1 << 1;
-    const FLAG_W: usize = 1 << 2;
-    const FLAG_X: usize = 1 << 3;
+    pub(super) const FLAG_V: usize = 1 << 0;
+    pub(super) const FLAG_R: usize = 1 << 1;
+    pub(super) const FLAG_W: usize = 1 << 2;
+    pub(super) const FLAG_X: usize = 1 << 3;
 
     /// Creates a [PTE] that points to the physical page containing
     /// the `pa`, or returns the corresponding [PgtError].
@@ -212,7 +218,7 @@ impl PTE {
 }
 
 #[derive(Debug)]
-enum PgtError {
+pub(super) enum PgtError {
     InvalidVirtualAddress,
     InvalidPhysicalAddress,
     InvalidPteFlags,

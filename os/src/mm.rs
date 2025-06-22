@@ -6,6 +6,19 @@ mod vm;
 
 use crate::{debug, error, info, log, trace, warn};
 
+/// The (base, size) pairs of the QEMU virt machine MMIO scheme.
+/// For more details, see [here].
+///
+/// [here]: https://github.com/qemu/qemu/blob/master/hw/riscv/virt.c#L82
+const QEMU_VIRT_MMIO: &[(usize, usize)] = &[
+    (0x0010_0000, 0x0000_1000), // VIRT_TEST
+    (0x0010_1000, 0x0000_1000), // VIRT_RTC
+    (0x0200_0000, 0x0001_0000), // VIRT_CLINT
+    (0x0c00_0000, 0x0060_0000), // VIRT_PLIC
+    (0x1000_0000, 0x0000_0100), // VIRT_UART0
+    (0x1001_0000, 0x0000_1000), // VIRT_VIRTIO
+];
+
 unsafe extern "C" {
     unsafe fn kernel_start();
     unsafe fn text_start();
@@ -29,6 +42,7 @@ pub(crate) fn init() {
     clear_bss();
     log_kernel_layout();
     heap_alloc::init();
+    vm::print_kernel_space();
 }
 
 fn clear_bss() {

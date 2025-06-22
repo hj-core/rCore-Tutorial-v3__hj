@@ -4,11 +4,12 @@ use alloc::vec::Vec;
 use lazy_static::lazy_static;
 
 use crate::mm::page_alloc::{
-    PAGE_SIZE_BYTES, PAGE_SIZE_ORDER, PHYS_MEM_BYTES, PHYS_MEM_START, PPN, Page,
+    PAGE_SIZE_BYTES, PAGE_SIZE_ORDER, PHYS_MEM_BYTES, PHYS_MEM_START, Page,
 };
+use crate::mm::sv39::{PTE, PgtError, RootPgt};
 use crate::mm::{
-    bss_end, bss_start, data_end, data_start, get_kernel_end, rodata_end, rodata_start, text_end,
-    text_start,
+    QEMU_VIRT_MMIO, bss_end, bss_start, data_end, data_start, get_kernel_end, rodata_end,
+    rodata_start, text_end, text_start,
 };
 use crate::println;
 use crate::sync::spin::SpinLock;
@@ -17,22 +18,47 @@ lazy_static! {
     static ref KERNEL_SPACE: SpinLock<VMSpace> = SpinLock::new(create_kernel_space());
 }
 
-/// Creates a VMSpace that matches the layout of kernel.
+const PERMISSION_R: usize = PTE::FLAG_R;
+const PERMISSION_W: usize = PTE::FLAG_W;
+const PERMISSION_X: usize = PTE::FLAG_X;
+
+/// Creates a [VMSpace] that matches the layout of the kernel.
 ///
-/// Currently, it contains a null root_pgt and no mappings, which
-/// will be fixed when the page table abstraction is implemented.
+/// It eagerly propagates the page table entries according to its
+/// [VMArea]s.
 fn create_kernel_space() -> VMSpace {
+    let root_pgt = RootPgt::new().expect("Failed to create root page table for kernel space");
+
     let mut result = VMSpace {
-        root_pgt: PPN(0),
+        root_pgt,
         areas: Vec::new(),
     };
+    push_qemu_mmio_areas(&mut result);
     push_kernel_text_area(&mut result);
     push_kernel_rodata_area(&mut result);
     push_kernel_data_area(&mut result);
+    push_kernel_boot_stack_area(&mut result);
     push_kernel_bss_area(&mut result);
     push_kernel_memory_area(&mut result);
 
     result
+}
+
+fn push_qemu_mmio_areas(kernel_space: &mut VMSpace) {
+    QEMU_VIRT_MMIO
+        .iter()
+        .map(|&(base, size)| VMArea {
+            start_vpn: VPN::from_addr(base),
+            end_vpn: VPN::from_addr(base + size.max(PAGE_SIZE_BYTES)),
+            map_type: MapType::Identical,
+            permissions: PERMISSION_R | PERMISSION_W,
+            allocated_pages: Vec::new(),
+        })
+        .for_each(|area| {
+            kernel_space
+                .push_area(area, true)
+                .expect("Failed to map qemu mmio area");
+        });
 }
 
 fn push_kernel_text_area(kernel_space: &mut VMSpace) {
@@ -43,7 +69,10 @@ fn push_kernel_text_area(kernel_space: &mut VMSpace) {
         permissions: PERMISSION_R | PERMISSION_X,
         allocated_pages: Vec::new(),
     };
-    kernel_space.push_area(area);
+
+    kernel_space
+        .push_area(area, true)
+        .expect("Failed to map kernel text area");
 }
 
 fn push_kernel_rodata_area(kernel_space: &mut VMSpace) {
@@ -54,7 +83,10 @@ fn push_kernel_rodata_area(kernel_space: &mut VMSpace) {
         permissions: PERMISSION_R,
         allocated_pages: Vec::new(),
     };
-    kernel_space.push_area(area);
+
+    kernel_space
+        .push_area(area, true)
+        .expect("Failed to map kernel rodata area");
 }
 
 fn push_kernel_data_area(kernel_space: &mut VMSpace) {
@@ -65,7 +97,24 @@ fn push_kernel_data_area(kernel_space: &mut VMSpace) {
         permissions: PERMISSION_R | PERMISSION_W,
         allocated_pages: Vec::new(),
     };
-    kernel_space.push_area(area);
+
+    kernel_space
+        .push_area(area, true)
+        .expect("Failed to map kernel data area");
+}
+
+fn push_kernel_boot_stack_area(kernel_space: &mut VMSpace) {
+    let area = VMArea {
+        start_vpn: VPN::from_addr(data_end as usize),
+        end_vpn: VPN::from_addr(bss_start as usize),
+        map_type: MapType::Identical,
+        permissions: PERMISSION_R | PERMISSION_W,
+        allocated_pages: Vec::new(),
+    };
+
+    kernel_space
+        .push_area(area, true)
+        .expect("Failed to map kernel boot stack area");
 }
 
 fn push_kernel_bss_area(kernel_space: &mut VMSpace) {
@@ -76,7 +125,10 @@ fn push_kernel_bss_area(kernel_space: &mut VMSpace) {
         permissions: PERMISSION_R | PERMISSION_W,
         allocated_pages: Vec::new(),
     };
-    kernel_space.push_area(area);
+
+    kernel_space
+        .push_area(area, true)
+        .expect("Failed to map kernel bss area");
 }
 
 fn push_kernel_memory_area(kernel_space: &mut VMSpace) {
@@ -87,7 +139,10 @@ fn push_kernel_memory_area(kernel_space: &mut VMSpace) {
         permissions: PERMISSION_R | PERMISSION_W,
         allocated_pages: Vec::new(),
     };
-    kernel_space.push_area(area);
+
+    kernel_space
+        .push_area(area, true)
+        .expect("Failed to map kernel memory area");
 }
 
 fn compute_kernel_memory_start_vpn() -> VPN {
@@ -122,13 +177,49 @@ pub(super) fn print_kernel_space() {
 /// the same root page table.
 #[derive(Debug)]
 struct VMSpace {
-    root_pgt: PPN,
+    root_pgt: RootPgt,
     areas: Vec<VMArea>,
 }
 
 impl VMSpace {
-    fn push_area(&mut self, area: VMArea) {
+    /// Push the `area` to this [VMSpace]. If `eager_mapping` is true,
+    /// it also propagates the page tables and entries according to the
+    /// `area`.
+    ///
+    /// If the mapping fails, the [VPN] causing the failure and the
+    /// corresponding [PgtError] are returned. However, the `area` would
+    /// have been added to the `areas`, and the propagated page tables
+    /// and entries are not rolled back.
+    fn push_area(&mut self, area: VMArea, eager_mapping: bool) -> Result<bool, (VPN, PgtError)> {
+        if !eager_mapping {
+            self.areas.push(area);
+            return Ok(true);
+        }
+
+        let start_vpn = area.start_vpn;
+        let end_vpn = area.end_vpn;
+        let map_type = area.map_type;
+        let permissions = area.permissions;
+
         self.areas.push(area);
+        for v in start_vpn.0..end_vpn.0 {
+            if let Err(e) = self.map(VPN(v), permissions, map_type) {
+                return Err((VPN(v), e));
+            }
+        }
+        Ok(true)
+    }
+
+    fn map(&mut self, vpn: VPN, permissions: usize, map_type: MapType) -> Result<bool, PgtError> {
+        match map_type {
+            MapType::Identical => self.map_identical(vpn, permissions),
+        }
+    }
+
+    fn map_identical(&mut self, vpn: VPN, permissions: usize) -> Result<bool, PgtError> {
+        let va = vpn.get_virtual_addr();
+        let pte_flags = permissions | PTE::FLAG_V;
+        self.root_pgt.map_create(va, va, pte_flags)
     }
 }
 
@@ -151,13 +242,13 @@ impl VPN {
     fn from_addr(addr: usize) -> VPN {
         VPN(addr >> PAGE_SIZE_ORDER)
     }
+
+    fn get_virtual_addr(&self) -> usize {
+        self.0 << PAGE_SIZE_ORDER
+    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 enum MapType {
     Identical,
 }
-
-const PERMISSION_R: usize = 1 << 1;
-const PERMISSION_W: usize = 1 << 2;
-const PERMISSION_X: usize = 1 << 3;
