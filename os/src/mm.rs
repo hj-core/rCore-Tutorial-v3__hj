@@ -40,7 +40,6 @@ pub(crate) fn get_kernel_end() -> usize {
 
 pub(crate) fn init() {
     clear_bss();
-    log_kernel_layout();
     heap_alloc::init();
     vm::print_kernel_space();
 }
