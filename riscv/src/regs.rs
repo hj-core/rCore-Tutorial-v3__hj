@@ -1,3 +1,4 @@
+pub mod satp;
 pub mod scause;
 pub mod sie;
 pub mod sstatus;
