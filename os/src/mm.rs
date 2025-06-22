@@ -1,6 +1,7 @@
 mod heap_alloc;
 mod page_alloc;
 pub mod prelude;
+mod sv39;
 mod vm;
 
 use crate::{debug, error, info, log, trace, warn};

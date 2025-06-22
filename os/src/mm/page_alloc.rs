@@ -126,6 +126,11 @@ pub(super) struct Page {
 }
 
 impl Page {
+    /// Returns the starting address of the [Page].
+    pub(super) fn get_physical_addr(&self) -> usize {
+        self.ppn.0 << PAGE_SIZE_ORDER
+    }
+
     pub(super) fn get_ppn(&self) -> PPN {
         self.ppn
     }

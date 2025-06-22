@@ -145,7 +145,7 @@ struct VMArea {
 
 /// Virtual Page Number
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct VPN(usize);
+pub(super) struct VPN(pub(super) usize);
 
 impl VPN {
     fn from_addr(addr: usize) -> VPN {
