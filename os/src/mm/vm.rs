@@ -1,7 +1,10 @@
 extern crate alloc;
 
+use core::arch::asm;
+
 use alloc::vec::Vec;
 use lazy_static::lazy_static;
+use riscv::regs::satp::{self, Mode};
 
 use crate::mm::page_alloc::{
     PAGE_SIZE_BYTES, PAGE_SIZE_ORDER, PHYS_MEM_BYTES, PHYS_MEM_START, Page,
@@ -21,6 +24,12 @@ lazy_static! {
 const PERMISSION_R: usize = PTE::FLAG_R;
 const PERMISSION_W: usize = PTE::FLAG_W;
 const PERMISSION_X: usize = PTE::FLAG_X;
+
+pub(super) fn enable_satp() {
+    let ppn = KERNEL_SPACE.lock().root_pgt.get_ppn();
+    satp::enable(ppn, Mode::Sv39);
+    unsafe { asm!("sfence.vma") };
+}
 
 /// Creates a [VMSpace] that matches the layout of the kernel.
 ///

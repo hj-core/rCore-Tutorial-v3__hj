@@ -85,6 +85,10 @@ impl RootPgt {
         })
     }
 
+    pub(super) fn get_ppn(&self) -> usize {
+        self.ppn
+    }
+
     fn as_mut_slice(&mut self) -> &mut [PTE] {
         unsafe { Self::as_mut_slice_from_ppn(self.ppn) }
     }

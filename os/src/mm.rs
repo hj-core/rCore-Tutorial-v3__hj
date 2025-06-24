@@ -41,6 +41,7 @@ pub(crate) fn get_kernel_end() -> usize {
 pub(crate) fn init() {
     clear_bss();
     heap_alloc::init();
+    vm::enable_satp();
     vm::print_kernel_space();
 }
 
