@@ -38,7 +38,7 @@ unsafe fn stack_range() -> (usize, usize) {
 pub fn main() -> i32 {
     assert_eq!(
         write(STDOUT, unsafe {
-            #[allow(clippy::zero_ptr)]
+            #[allow(invalid_null_arguments)]
             slice::from_raw_parts(0x0 as *const _, 10)
         }),
         -1
