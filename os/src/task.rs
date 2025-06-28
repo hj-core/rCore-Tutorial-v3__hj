@@ -61,7 +61,7 @@ impl UserStack {
 }
 
 pub(super) fn start() -> ! {
-    let fail_count = loader::install_all_apps();
+    let fail_count = unsafe { loader::load_all_apps() };
     assert_eq!(fail_count, 0, "{fail_count} user apps failed to install.");
 
     push_all_first_run_trap_contexts();

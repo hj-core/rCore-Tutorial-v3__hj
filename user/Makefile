@@ -28,9 +28,6 @@ QEMU := qemu-riscv64
 # Targets
 build:
 	@python3 build.py $(MODE_ARG) --bin
-	@$(foreach elf, $(ELFS), \
-		$(OBJCOPY) $(elf) --strip-all -O binary $(patsubst $(APP_ELF_DIR)/%, $(APP_BIN_DIR)/%.bin, $(elf)); \
-	)
 .PHONY: build
 
 clean:

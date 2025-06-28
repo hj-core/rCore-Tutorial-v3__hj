@@ -15,7 +15,7 @@ impl UserApp {
     const OUTPUT: &str = "src/link_apps.S";
     const SRC_DIR: &str = "../user/src/bin";
     const SRC_EXTENSION: &str = ".rs";
-    const BIN_DIR: &str = "../user/target/riscv64gc-unknown-none-elf/release";
+    const ELF_DIR: &str = "../user/target/riscv64gc-unknown-none-elf/release";
 
     fn generate_asm() {
         let mut names = Self::get_app_names();
@@ -65,28 +65,46 @@ _num_apps:
         for i in 0..total_apps {
             writeln!(
                 dst,
-                r#"    .quad app_{i}_name
-    .quad app_{i}_start
-    .quad app_{i}_end"#
+                r#"    .quad app_{i}_name_start
+    .quad app_{i}_name_end
+    .quad app_{i}_elf_start
+    .quad app_{i}_elf_end"#
             )?;
         }
 
-        // Write the per-app part
+        // Write the app names
         for i in 0..total_apps {
             writeln!(
                 dst,
                 r#"
     .section .data
-    .global app_{i}_name
-    .global app_{i}_start
-    .global app_{i}_end
-app_{i}_name:
+    .global app_{i}_name_start
+    .global app_{i}_name_end
+app_{i}_name_start:
     .ascii "{app_name_bytes}"
-app_{i}_start:
-    .incbin "{bin_dir}/{app_name}.bin"
-app_{i}_end:"#,
-                app_name_bytes = app_names[i],
-                bin_dir = Self::BIN_DIR,
+app_{i}_name_end:"#,
+                app_name_bytes = app_names[i]
+            )?;
+        }
+
+        // Write the per-app part
+        write!(
+            dst,
+            "
+    .align 3"
+        )?;
+
+        for i in 0..total_apps {
+            writeln!(
+                dst,
+                r#"
+    .section .data
+    .global app_{i}_elf_start
+    .global app_{i}_elf_end
+app_{i}_elf_start:
+    .incbin "{elf_dir}/{app_name}"
+app_{i}_elf_end:"#,
+                elf_dir = Self::ELF_DIR,
                 app_name = app_names[i]
             )?;
         }
