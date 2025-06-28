@@ -35,6 +35,10 @@ pub(super) fn enable_satp() {
 ///
 /// It eagerly propagates the page table entries according to its
 /// [VMArea]s.
+///
+/// # Panic
+/// * If it fails to create the root page table.
+/// * If it fails to push an area.
 fn create_kernel_space() -> VMSpace {
     let root_pgt = RootPgt::new().expect("Failed to create root page table for kernel space");
 
@@ -195,11 +199,11 @@ impl VMSpace {
     /// it also propagates the page tables and entries according to the
     /// `area`.
     ///
-    /// If the mapping fails, the [VPN] causing the failure and the
-    /// corresponding [PgtError] are returned. However, the `area` would
-    /// have been added to the `areas`, and the propagated page tables
-    /// and entries are not rolled back.
-    fn push_area(&mut self, area: VMArea, eager_mapping: bool) -> Result<bool, (VPN, PgtError)> {
+    /// If the mapping fails, it returns a [VMError::MappingError], which
+    /// contains the [VPN] causing the failure and the corresponding [PgtError].
+    /// However, the `area` would have already been added to `areas`, and
+    /// the propagated page tables and entries are not rolled back.
+    fn push_area(&mut self, area: VMArea, eager_mapping: bool) -> Result<bool, VMError> {
         if !eager_mapping {
             self.areas.push(area);
             return Ok(true);
@@ -213,22 +217,24 @@ impl VMSpace {
         self.areas.push(area);
         for v in start_vpn.0..end_vpn.0 {
             if let Err(e) = self.map(VPN(v), permissions, map_type) {
-                return Err((VPN(v), e));
+                return Err(e);
             }
         }
         Ok(true)
     }
 
-    fn map(&mut self, vpn: VPN, permissions: usize, map_type: MapType) -> Result<bool, PgtError> {
+    fn map(&mut self, vpn: VPN, permissions: usize, map_type: MapType) -> Result<bool, VMError> {
         match map_type {
             MapType::Identical => self.map_identical(vpn, permissions),
         }
     }
 
-    fn map_identical(&mut self, vpn: VPN, permissions: usize) -> Result<bool, PgtError> {
+    fn map_identical(&mut self, vpn: VPN, permissions: usize) -> Result<bool, VMError> {
         let va = vpn.get_virtual_addr();
         let pte_flags = permissions | PTE::FLAG_V;
-        self.root_pgt.map_create(va, va, pte_flags)
+        self.root_pgt
+            .map_create(va, va, pte_flags)
+            .map_err(|pgt_err| VMError::MappingError(vpn, pgt_err))
     }
 }
 
@@ -260,4 +266,11 @@ impl VPN {
 #[derive(Debug, Copy, Clone)]
 enum MapType {
     Identical,
+}
+
+#[allow(dead_code)]
+#[derive(Debug)]
+enum VMError {
+    CreateRootPgtFailed(PgtError),
+    MappingError(VPN, PgtError),
 }
