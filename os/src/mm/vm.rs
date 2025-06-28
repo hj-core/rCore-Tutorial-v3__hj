@@ -40,12 +40,8 @@ pub(super) fn enable_satp() {
 /// * If it fails to create the root page table.
 /// * If it fails to push an area.
 fn create_kernel_space() -> VMSpace {
-    let root_pgt = RootPgt::new().expect("Failed to create root page table for kernel space");
+    let mut result = VMSpace::new().expect("Failed to create empty kernel space");
 
-    let mut result = VMSpace {
-        root_pgt,
-        areas: Vec::new(),
-    };
     push_qemu_mmio_areas(&mut result);
     push_kernel_text_area(&mut result);
     push_kernel_rodata_area(&mut result);
@@ -195,6 +191,13 @@ struct VMSpace {
 }
 
 impl VMSpace {
+    /// Returns a new [VMSpace] with a [RootPgt] and no areas.
+    fn new() -> Result<Self, VMError> {
+        let root_pgt = RootPgt::new().map_err(VMError::CreateRootPgtFailed)?;
+        let areas = Vec::new();
+        Ok(Self { root_pgt, areas })
+    }
+
     /// Push the `area` to this [VMSpace]. If `eager_mapping` is true,
     /// it also propagates the page tables and entries according to the
     /// `area`.
