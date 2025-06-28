@@ -4,7 +4,7 @@ use crate::mm::prelude as mm_p;
 use crate::{debug, log, warn};
 
 /// The agreed-upon address where the first user app should be installed.
-const APP_ENTRY_PTR_0: *mut u8 = 0x8040_0000 as *mut u8;
+const APP_ENTRY_PTR_0: *mut u8 = 0x8080_0000 as *mut u8;
 const APP_MAX_SIZE: usize = 0x2_0000;
 const APP_MAX_NUMBER: usize = super::TASK_MAX_NUMBER;
 

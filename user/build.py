@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 _APP_SRC_DIR = "src/bin"
-_APP_BASE_ADDR_0 = 0x8040_0000
+_APP_BASE_ADDR_0 = 0x8080_0000
 _APP_MAX_SIZE = 0x2_0000
 
 _LINKER_PATH = "src/linker.ld"
