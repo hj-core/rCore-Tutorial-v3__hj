@@ -1,6 +1,7 @@
 extern crate alloc;
 
 use core::arch::asm;
+use core::slice;
 
 use alloc::vec::Vec;
 use lazy_static::lazy_static;
@@ -219,25 +220,52 @@ impl VMSpace {
 
         self.areas.push(area);
         for v in start_vpn.0..end_vpn.0 {
-            if let Err(e) = self.map(VPN(v), permissions, map_type) {
-                return Err(e);
-            }
+            self.map(VPN(v), permissions, map_type, None)?;
         }
         Ok(true)
     }
 
-    fn map(&mut self, vpn: VPN, permissions: usize, map_type: MapType) -> Result<bool, VMError> {
+    /// Maps the `vpn`. If `data` is not [None], it also copies the data
+    /// to the mapped physical page.
+    ///
+    /// If the mapping fails, it returns the corresponding [VMError].
+    fn map(
+        &mut self,
+        vpn: VPN,
+        permissions: usize,
+        map_type: MapType,
+        data: Option<&[u8]>,
+    ) -> Result<bool, VMError> {
+        if data.is_some_and(|data| data.len() > PAGE_SIZE_BYTES) {
+            return Err(VMError::DataExceedPage(vpn));
+        }
+
         match map_type {
-            MapType::Identical => self.map_identical(vpn, permissions),
+            MapType::Identical => self.map_identical(vpn, permissions, data),
         }
     }
 
-    fn map_identical(&mut self, vpn: VPN, permissions: usize) -> Result<bool, VMError> {
+    fn map_identical(
+        &mut self,
+        vpn: VPN,
+        permissions: usize,
+        data: Option<&[u8]>,
+    ) -> Result<bool, VMError> {
         let va = vpn.get_virtual_addr();
+        let pa = va;
         let pte_flags = permissions | PTE::FLAG_V;
+
         self.root_pgt
-            .map_create(va, va, pte_flags)
-            .map_err(|pgt_err| VMError::MappingError(vpn, pgt_err))
+            .map_create(va, pa, pte_flags)
+            .map_err(|pgt_err| VMError::MappingError(vpn, pgt_err))?;
+
+        if let Some(data) = data {
+            let dst = unsafe {
+                slice::from_raw_parts_mut(pa as *mut u8, data.len().min(PAGE_SIZE_BYTES))
+            };
+            dst.copy_from_slice(data);
+        }
+        Ok(true)
     }
 }
 
@@ -276,4 +304,5 @@ enum MapType {
 enum VMError {
     CreateRootPgtFailed(PgtError),
     MappingError(VPN, PgtError),
+    DataExceedPage(VPN),
 }
