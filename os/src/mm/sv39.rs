@@ -108,7 +108,9 @@ impl RootPgt {
     /// containing the `pa`, and constructs any necessary intermediate
     /// page tables.
     ///
-    /// If an error occurred, it returns the corresponding [PgtError].
+    /// If an error occurrs, it returns the corresponding [PgtError].
+    /// However, the newly created [PTE]s and acquired [Page]s are not
+    /// rolled back.
     pub(super) fn map_create(
         &mut self,
         va: usize,
@@ -117,18 +119,17 @@ impl RootPgt {
     ) -> Result<bool, PgtError> {
         let va = parse_virtual_addr(va)?;
         let leaf_pte = PTE::new(pa, pte_flags)?;
+        // SAFETY:
+        // The RootPgt instance itself must point to a physical page holding
+        // the corresponding page table.
+        let mut table = unsafe { Self::as_mut_slice_from_ppn(self.ppn) };
 
-        // We defer pushing the new pages to the RootPgt so that they get
-        // dropped when the map_create fails.
-        let mut acquired_pages = Vec::new();
-
-        let mut table = self.as_mut_slice();
         // Walk to the leaf table
         for step in 0..2 {
             if !table[va[step]].is_valid() {
                 let page = acquire_zeroed_page()?;
                 table[va[step]] = PTE::new(page.get_physical_addr(), PTE::FLAG_V)?;
-                acquired_pages.push(page);
+                self.pages.push(page);
             }
 
             if table[va[step]].is_leaf() {
@@ -147,7 +148,6 @@ impl RootPgt {
         }
         table[va[2]] = leaf_pte;
 
-        self.pages.append(&mut acquired_pages);
         Ok(true)
     }
 }
