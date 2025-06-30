@@ -89,10 +89,6 @@ impl RootPgt {
         self.ppn
     }
 
-    fn as_mut_slice(&mut self) -> &mut [PTE] {
-        unsafe { Self::as_mut_slice_from_ppn(self.ppn) }
-    }
-
     /// Returns a slice over the physical page corresponding to the
     /// `ppn` in Sv39.
     ///
