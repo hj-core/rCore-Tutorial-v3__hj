@@ -25,6 +25,7 @@ lazy_static! {
 const PERMISSION_R: usize = PTE::FLAG_R;
 const PERMISSION_W: usize = PTE::FLAG_W;
 const PERMISSION_X: usize = PTE::FLAG_X;
+const PERMISSION_ALL_FLAGS: usize = PERMISSION_R | PERMISSION_W | PERMISSION_X;
 
 pub(super) fn enable_satp() {
     let ppn = KERNEL_SPACE.lock().root_pgt.get_ppn();
@@ -236,6 +237,10 @@ impl VMSpace {
         map_type: MapType,
         data: Option<&[u8]>,
     ) -> Result<bool, VMError> {
+        if permissions & !PERMISSION_ALL_FLAGS != 0 {
+            return Err(VMError::InvalidPermissions(permissions));
+        }
+
         if data.is_some_and(|data| data.len() > PAGE_SIZE_BYTES) {
             return Err(VMError::DataExceedPage(vpn));
         }
@@ -316,6 +321,7 @@ enum MapType {
 #[derive(Debug)]
 enum VMError {
     CreateRootPgtFailed(PgtError),
+    InvalidPermissions(usize),
     MappingError(VPN, PgtError),
     DataExceedPage(VPN),
 }
