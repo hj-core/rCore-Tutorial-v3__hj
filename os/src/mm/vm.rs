@@ -260,12 +260,25 @@ impl VMSpace {
             .map_err(|pgt_err| VMError::MappingError(vpn, pgt_err))?;
 
         if let Some(data) = data {
-            let dst = unsafe {
-                slice::from_raw_parts_mut(pa as *mut u8, data.len().min(PAGE_SIZE_BYTES))
-            };
-            dst.copy_from_slice(data);
+            unsafe { Self::copy_data(pa, data) };
         }
         Ok(true)
+    }
+
+    /// Copies `data` to the memory starting at `addr`.
+    ///
+    /// At most [PAGE_SIZE_BYTES] bytes are copied. If `data` is larger
+    /// than a page, the extra data is ignored.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that the address range starting from `addr`
+    /// with a length of `data.len().min(PAGE_SIZE_BYTES)` is valid and
+    /// writable.
+    unsafe fn copy_data(addr: usize, data: &[u8]) {
+        let dst =
+            unsafe { slice::from_raw_parts_mut(addr as *mut u8, data.len().min(PAGE_SIZE_BYTES)) };
+        dst.copy_from_slice(data);
     }
 }
 
