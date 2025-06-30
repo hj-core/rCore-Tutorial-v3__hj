@@ -258,7 +258,7 @@ impl VMSpace {
     ) -> Result<bool, VMError> {
         let va = vpn.get_virtual_addr();
         let pa = va;
-        let pte_flags = permissions | PTE::FLAG_V;
+        let pte_flags = Self::to_pte_flags(permissions);
 
         self.root_pgt
             .map_create(va, pa, pte_flags)
@@ -268,6 +268,10 @@ impl VMSpace {
             unsafe { Self::copy_data(pa, data) };
         }
         Ok(true)
+    }
+
+    fn to_pte_flags(permissions: usize) -> usize {
+        (permissions & PERMISSION_ALL_FLAGS) | PTE::FLAG_V
     }
 
     /// Copies `data` to the memory starting at `addr`.
