@@ -216,49 +216,67 @@ impl VMSpace {
 
         let start_vpn = area.start_vpn;
         let end_vpn = area.end_vpn;
-        let map_type = area.map_type;
-        let permissions = area.permissions;
-
         self.areas.push(area);
+
+        let area_id = self.find_area(start_vpn)?;
         for v in start_vpn.0..end_vpn.0 {
-            self.map(VPN(v), permissions, map_type, None)?;
+            self.map(VPN(v), area_id, None)?;
         }
         Ok(true)
+    }
+
+    /// Returns an identifier to the [VMArea] containing the `vpn`,
+    /// Or a [VMError] if such area does not exist.
+    fn find_area(&self, vpn: VPN) -> Result<usize, VMError> {
+        self.areas
+            .iter()
+            .rposition(|area| area.start_vpn <= vpn && vpn < area.end_vpn)
+            .ok_or(VMError::NoAreaForVpn(vpn))
+    }
+
+    fn get_area(&self, area_id: usize) -> Result<&VMArea, VMError> {
+        self.areas
+            .get(area_id)
+            .ok_or(VMError::InvalidAreaId(area_id))
     }
 
     /// Maps the `vpn`. If `data` is not [None], it also copies the data
     /// to the mapped physical page.
     ///
     /// If the mapping fails, it returns the corresponding [VMError].
-    fn map(
-        &mut self,
-        vpn: VPN,
-        permissions: usize,
-        map_type: MapType,
-        data: Option<&[u8]>,
-    ) -> Result<bool, VMError> {
-        if permissions & !PERMISSION_ALL_FLAGS != 0 {
-            return Err(VMError::InvalidPermissions(permissions));
+    fn map(&mut self, vpn: VPN, area_id: usize, data: Option<&[u8]>) -> Result<bool, VMError> {
+        let area = self.get_area(area_id)?;
+        if vpn < area.start_vpn || vpn >= area.end_vpn {
+            return Err(VMError::AreaVpnMismatch(area_id, vpn));
         }
+
+        let map_type = area.map_type;
 
         if data.is_some_and(|data| data.len() > PAGE_SIZE_BYTES) {
             return Err(VMError::DataExceedPage(vpn));
         }
 
         match map_type {
-            MapType::Identical => self.map_identical(vpn, permissions, data),
+            MapType::Identical => self.map_identical(vpn, area_id, data),
         }
     }
 
+    /// Maps the `vpn` to the physical page with the same page number.
+    /// If `data` is not [None], it also copies the data to the mapped
+    /// physical page.
+    ///
+    /// This function assumes the `vpn` belongs to the [VMArea] with
+    /// `area_id`. If `data` is not [None], it also assumes the [VMArea]
+    /// owns the mapped physical page.
     fn map_identical(
         &mut self,
         vpn: VPN,
-        permissions: usize,
+        area_id: usize,
         data: Option<&[u8]>,
     ) -> Result<bool, VMError> {
         let va = vpn.get_virtual_addr();
         let pa = va;
-        let pte_flags = Self::to_pte_flags(permissions);
+        let pte_flags = Self::to_pte_flags(self.areas[area_id].permissions);
 
         self.root_pgt
             .map_create(va, pa, pte_flags)
@@ -325,6 +343,9 @@ enum MapType {
 #[derive(Debug)]
 enum VMError {
     CreateRootPgtFailed(PgtError),
+    NoAreaForVpn(VPN),
+    AreaVpnMismatch(usize, VPN),
+    InvalidAreaId(usize),
     InvalidPermissions(usize),
     MappingError(VPN, PgtError),
     DataExceedPage(VPN),
