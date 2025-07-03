@@ -60,7 +60,7 @@ fn push_qemu_mmio_areas(kernel_space: &mut VMSpace) {
         .iter()
         .map(|&(base, size)| VMArea {
             start_vpn: VPN::from_addr(base),
-            end_vpn: VPN::from_addr(base + size.max(PAGE_SIZE_BYTES)),
+            end_vpn: VPN::from_addr(base + size + PAGE_SIZE_BYTES - 1),
             map_type: MapType::Identical,
             permissions: PERMISSION_R | PERMISSION_W,
             allocated_pages: Vec::new(),
