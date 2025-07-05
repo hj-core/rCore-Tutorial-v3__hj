@@ -161,6 +161,7 @@ impl PTE {
     pub(super) const FLAG_R: usize = 1 << 1;
     pub(super) const FLAG_W: usize = 1 << 2;
     pub(super) const FLAG_X: usize = 1 << 3;
+    pub(super) const FLAG_U: usize = 1 << 4;
 
     /// Creates a [PTE] that points to the physical page containing
     /// the `pa`, or returns the corresponding [PgtError].

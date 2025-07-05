@@ -42,7 +42,6 @@ pub(crate) fn init() {
     clear_bss();
     heap_alloc::init();
     vm::enable_satp();
-    vm::print_kernel_space();
 }
 
 fn clear_bss() {

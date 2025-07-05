@@ -5,6 +5,9 @@ pub(crate) use super::get_task_info;
 pub(crate) use super::get_task_name;
 pub(crate) use super::record_syscall_for_recent_task;
 
+pub(crate) use super::loader::get_app_elf_bytes;
+pub(crate) use super::loader::get_app_entry_ptr;
+pub(crate) use super::loader::get_total_apps;
 pub(crate) use super::loader::log_app_elfs_layout;
 
 pub(crate) use super::runner::get_recent_task_index;

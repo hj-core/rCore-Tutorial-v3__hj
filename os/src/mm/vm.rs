@@ -1,22 +1,31 @@
 extern crate alloc;
 
+use alloc::vec::Vec;
 use core::arch::asm;
 use core::slice;
 
-use alloc::vec::Vec;
 use lazy_static::lazy_static;
-use riscv::regs::satp::{self, Mode};
-
-use crate::mm::page_alloc::{
-    PAGE_SIZE_BYTES, PAGE_SIZE_ORDER, PHYS_MEM_BYTES, PHYS_MEM_START, Page,
+use riscv::regs::{
+    satp::{self, Mode},
+    sstatus,
 };
+use xmas_elf::{
+    ElfFile,
+    program::{self, Flags},
+};
+
+use crate::mm::page_alloc::{PAGE_SIZE_BYTES, PAGE_SIZE_ORDER, PHYS_MEM_START, Page};
 use crate::mm::sv39::{PTE, PgtError, RootPgt};
 use crate::mm::{
     QEMU_VIRT_MMIO, bss_end, bss_start, data_end, data_start, get_kernel_end, rodata_end,
     rodata_start, text_end, text_start,
 };
-use crate::println;
 use crate::sync::spin::SpinLock;
+use crate::task::prelude::get_app_entry_ptr;
+use crate::{
+    println,
+    task::prelude::{get_app_elf_bytes, get_total_apps},
+};
 
 lazy_static! {
     static ref KERNEL_SPACE: SpinLock<VMSpace> = SpinLock::new(create_kernel_space());
@@ -25,9 +34,12 @@ lazy_static! {
 const PERMISSION_R: usize = PTE::FLAG_R;
 const PERMISSION_W: usize = PTE::FLAG_W;
 const PERMISSION_X: usize = PTE::FLAG_X;
-const PERMISSION_ALL_FLAGS: usize = PERMISSION_R | PERMISSION_W | PERMISSION_X;
+const PERMISSION_U: usize = PTE::FLAG_U;
+const PERMISSION_ALL_FLAGS: usize = PERMISSION_R | PERMISSION_W | PERMISSION_X | PERMISSION_U;
 
 pub(super) fn enable_satp() {
+    sstatus::set_sum_permit();
+
     let ppn = KERNEL_SPACE.lock().root_pgt.get_ppn();
     satp::enable(ppn, Mode::Sv39);
     unsafe { asm!("sfence.vma") };
@@ -51,6 +63,7 @@ fn create_kernel_space() -> VMSpace {
     push_kernel_boot_stack_area(&mut result);
     push_kernel_bss_area(&mut result);
     push_kernel_memory_area(&mut result);
+    push_kernel_apps_areas(&mut result);
 
     result
 }
@@ -133,7 +146,8 @@ fn push_kernel_bss_area(kernel_space: &mut VMSpace) {
         start_vpn: VPN::from_addr(bss_start as usize),
         end_vpn: VPN::from_addr(bss_end as usize),
         map_type: MapType::Identical,
-        permissions: PERMISSION_R | PERMISSION_W,
+        // Requrie PERMISSION_U because we have User stacks in it
+        permissions: PERMISSION_R | PERMISSION_W | PERMISSION_U,
         allocated_pages: Vec::new(),
     };
 
@@ -171,12 +185,97 @@ fn compute_kernel_memory_end_vpn() -> VPN {
         PHYS_MEM_START & (PAGE_SIZE_BYTES - 1) == 0,
         "The algorithm assumes PYHS_MEM_START is page-aligned"
     );
-    assert!(
-        PHYS_MEM_BYTES & (PAGE_SIZE_BYTES - 1) == 0,
-        "The algorithm assumes PYHS_MEM_BYTES is page-aligned"
-    );
 
-    VPN::from_addr(PHYS_MEM_START + PHYS_MEM_BYTES)
+    VPN::from_addr(get_app_entry_ptr(0).addr())
+}
+
+fn push_kernel_apps_areas(kernel_space: &mut VMSpace) {
+    for app_index in 0..get_total_apps() {
+        let elf_bytes = get_app_elf_bytes(app_index);
+        load_elf(kernel_space, elf_bytes, true, MapType::Identical).expect("Failed to load app");
+    }
+}
+
+/// Creates [VMArea]s according to the layout specified in the
+/// `elf_input` and pushes them into `space`.
+fn load_elf(
+    space: &mut VMSpace,
+    elf_bytes: &[u8],
+    is_user: bool,
+    map_type: MapType,
+) -> Result<bool, VMError> {
+    let elf = ElfFile::new(elf_bytes).map_err(|msg| VMError::ParseElfFailed(msg))?;
+
+    for ph in elf.program_iter() {
+        let header_type = ph.get_type().map_err(|msg| VMError::ParseElfFailed(msg))?;
+        if header_type != program::Type::Load {
+            continue;
+        }
+
+        let align = ph.align() as usize;
+        if PAGE_SIZE_BYTES % align != 0 {
+            return Err(VMError::DataNotPageAligned(align));
+        }
+
+        let area = create_area_from_ph(&ph, is_user, map_type)?;
+        let start_vpn = area.start_vpn;
+        let end_vpn = area.end_vpn;
+        space.push_area(area, false)?;
+
+        let area_id = space.find_area(start_vpn)?;
+        let mut file_start = ph.offset() as usize;
+        let file_end = file_start + ph.file_size() as usize;
+
+        for v in start_vpn.0..end_vpn.0 {
+            let data = if file_start < file_end {
+                let bytes = &elf_bytes[file_start..(file_start + PAGE_SIZE_BYTES).min(file_end)];
+                file_start += PAGE_SIZE_BYTES;
+
+                Some(bytes)
+            } else {
+                None
+            };
+            space.map(VPN(v), area_id, data)?;
+        }
+    }
+    Ok(true)
+}
+
+fn create_area_from_ph(
+    ph: &program::ProgramHeader,
+    is_user: bool,
+    map_type: MapType,
+) -> Result<VMArea, VMError> {
+    let va_start = ph.virtual_addr() as usize;
+    let mem_size = ph.mem_size() as usize;
+
+    let start_vpn = VPN::from_addr(va_start);
+    let end_vpn = VPN::from_addr(va_start + mem_size + PAGE_SIZE_BYTES - 1);
+    let permissions = get_permissions_from_ph_flags(ph.flags(), is_user);
+
+    Ok(VMArea {
+        start_vpn,
+        end_vpn,
+        map_type,
+        permissions,
+        allocated_pages: Vec::new(),
+    })
+}
+
+fn get_permissions_from_ph_flags(flags: Flags, is_user: bool) -> usize {
+    let mut result = if is_user { PERMISSION_U } else { 0 };
+
+    if flags.is_read() {
+        result |= PERMISSION_R;
+    }
+    if flags.is_write() {
+        result |= PERMISSION_W;
+    }
+    if flags.is_execute() {
+        result |= PERMISSION_X;
+    }
+
+    result
 }
 
 #[allow(dead_code)]
@@ -349,4 +448,6 @@ enum VMError {
     InvalidPermissions(usize),
     MappingError(VPN, PgtError),
     DataExceedPage(VPN),
+    ParseElfFailed(&'static str),
+    DataNotPageAligned(usize),
 }

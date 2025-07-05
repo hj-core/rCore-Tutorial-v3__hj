@@ -1,10 +1,7 @@
 use core::str;
-use core::{arch::asm, cmp::min, slice};
+use core::{cmp::min, slice};
 
-use xmas_elf::{ElfFile, program};
-
-use crate::mm::prelude as mm_p;
-use crate::{debug, log, warn};
+use crate::{debug, log};
 
 /// The agreed-upon address where the first user app should be
 /// installed.
@@ -68,69 +65,8 @@ pub(super) fn get_app_name<'a>(app_index: usize) -> &'a str {
     str::from_utf8(slice).unwrap_or("")
 }
 
-/// Loads the user apps (up to [APP_MAX_NUMBER]) into memory
-/// according to their ELF and returns the number of failed apps.
-///
-/// # Safety
-/// * Apps must coordinate with each other to avoid stepping on
-/// each other's toes.
-pub(super) unsafe fn load_all_apps() -> usize {
-    if APP_ENTRY_PTR_0.addr() < mm_p::get_kernel_end() {
-        panic!("Kernel data extruded into the app-reserved addresses.");
-    }
-
-    let result = (0..get_total_apps())
-        .filter(|&app_index| unsafe { load_app(app_index) == 0 })
-        .inspect(|&app_index| {
-            warn!(
-                "Failed to install user app: index={}, name={}",
-                app_index,
-                get_app_name(app_index)
-            );
-        })
-        .count();
-
-    // Prevent CPU from using outdated instruction cache
-    unsafe { asm!("fence.i") };
-
-    result
-}
-
-/// Loads the app into memory according to its ELF and returns
-/// the number of bytes copied.
-///
-/// Please note that the returned number of bytes may be smaller
-/// than the actual memory footprint.
-///
-/// # Safety
-/// * Apps must coordinate with each other to avoid stepping on
-/// each other's toes.
-unsafe fn load_app(app_index: usize) -> usize {
-    if app_index >= get_total_apps() {
-        return 0;
-    }
-
-    let input = get_app_elf_bytes(app_index);
-    let elf = ElfFile::new(input).expect("Failed to parse elf");
-    let mut result = 0;
-
-    elf.program_iter()
-        .filter(|ph| ph.get_type() == Ok(program::Type::Load))
-        .for_each(|ph| {
-            let file_size = ph.file_size() as usize;
-            let file_offset = ph.offset() as usize;
-            let va_base = ph.virtual_addr() as *mut u8;
-
-            for i in 0..file_size {
-                unsafe { va_base.add(i).write(input[file_offset + i]) }
-            }
-            result += ph.file_size() as usize;
-        });
-    result
-}
-
 /// Returns the bytes of the app's ELF.
-fn get_app_elf_bytes<'a>(app_index: usize) -> &'a [u8] {
+pub(crate) fn get_app_elf_bytes<'a>(app_index: usize) -> &'a [u8] {
     let elf_start = get_app_elf_start(app_index);
     let elf_end = get_app_elf_end(app_index);
     let elf_size = elf_end - elf_start;
@@ -167,7 +103,7 @@ fn get_app_elf_end(app_index: usize) -> usize {
 /// # Warning
 /// * To be deprecated when virtual address for user space is
 /// implemented.
-pub(super) fn get_app_entry_ptr(app_index: usize) -> *mut u8 {
+pub(crate) fn get_app_entry_ptr(app_index: usize) -> *mut u8 {
     unsafe { APP_ENTRY_PTR_0.add(app_index * APP_MAX_SIZE) }
 }
 
