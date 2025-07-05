@@ -1,12 +1,12 @@
     .section .text.entry
     .global _start
 _start:
-    la sp, boot_stack_top
+    la sp, boot_stack_end
     call rust_main
 
-    .section .bss.stack
-    .global boot_stack_lower_bound
-boot_stack_lower_bound:
+    .section .bss.boot_stack
+    .global boot_stack_start
+    .global boot_stack_end
+boot_stack_start:
     .space 4096 * 16
-    .global boot_stack_top
-boot_stack_top:
+boot_stack_end:

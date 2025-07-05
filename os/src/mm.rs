@@ -27,8 +27,8 @@ unsafe extern "C" {
     unsafe fn rodata_end();
     unsafe fn data_start();
     unsafe fn data_end();
-    unsafe fn boot_stack_lower_bound();
-    unsafe fn boot_stack_top();
+    unsafe fn boot_stack_start();
+    unsafe fn boot_stack_end();
     unsafe fn bss_start();
     unsafe fn bss_end();
     unsafe fn kernel_end();
@@ -78,9 +78,9 @@ pub(crate) fn log_kernel_layout() {
     );
     warn!(
         ".boot_stack [{:#x}, {:#x}) size={}",
-        boot_stack_lower_bound as usize,
-        boot_stack_top as usize,
-        boot_stack_top as usize - boot_stack_lower_bound as usize
+        boot_stack_start as usize,
+        boot_stack_end as usize,
+        boot_stack_end as usize - boot_stack_start as usize
     );
     error!(
         ".bss        [{:#x}, {:#x}) size={}",

@@ -31,7 +31,8 @@ SECTIONS
     . = ALIGN(4K);
     data_end = .;
     .bss : {
-        *(.bss.stack)
+        *(.bss.boot_stack)
+        . = ALIGN(4K);
         bss_start = .;
         *(.bss .bss.*)
         *(.sbss .sbss.*)
