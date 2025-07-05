@@ -17,15 +17,13 @@ use xmas_elf::{
 use crate::mm::page_alloc::{PAGE_SIZE_BYTES, PAGE_SIZE_ORDER, PHYS_MEM_START, Page};
 use crate::mm::sv39::{PTE, PgtError, RootPgt};
 use crate::mm::{
-    QEMU_VIRT_MMIO, bss_end, bss_start, data_end, data_start, get_kernel_end, rodata_end,
-    rodata_start, text_end, text_start,
+    QEMU_VIRT_MMIO, boot_stack_end, boot_stack_start, bss_end, bss_start, data_end, data_start,
+    get_kernel_end, rodata_end, rodata_start, text_end, text_start, user_stacks_end,
+    user_stacks_start,
 };
+use crate::println;
 use crate::sync::spin::SpinLock;
-use crate::task::prelude::get_app_entry_ptr;
-use crate::{
-    println,
-    task::prelude::{get_app_elf_bytes, get_total_apps},
-};
+use crate::task::prelude::{get_app_elf_bytes, get_app_entry_ptr, get_total_apps};
 
 lazy_static! {
     static ref KERNEL_SPACE: SpinLock<VMSpace> = SpinLock::new(create_kernel_space());
@@ -61,6 +59,7 @@ fn create_kernel_space() -> VMSpace {
     push_kernel_rodata_area(&mut result);
     push_kernel_data_area(&mut result);
     push_kernel_boot_stack_area(&mut result);
+    push_kernel_user_stacks_area(&mut result);
     push_kernel_bss_area(&mut result);
     push_kernel_memory_area(&mut result);
     push_kernel_apps_areas(&mut result);
@@ -129,8 +128,8 @@ fn push_kernel_data_area(kernel_space: &mut VMSpace) {
 
 fn push_kernel_boot_stack_area(kernel_space: &mut VMSpace) {
     let area = VMArea {
-        start_vpn: VPN::from_addr(data_end as usize),
-        end_vpn: VPN::from_addr(bss_start as usize),
+        start_vpn: VPN::from_addr(boot_stack_start as usize),
+        end_vpn: VPN::from_addr(boot_stack_end as usize),
         map_type: MapType::Identical,
         permissions: PERMISSION_R | PERMISSION_W,
         allocated_pages: Vec::new(),
@@ -141,13 +140,26 @@ fn push_kernel_boot_stack_area(kernel_space: &mut VMSpace) {
         .expect("Failed to map kernel boot stack area");
 }
 
+fn push_kernel_user_stacks_area(kernel_space: &mut VMSpace) {
+    let area = VMArea {
+        start_vpn: VPN::from_addr(user_stacks_start as usize),
+        end_vpn: VPN::from_addr(user_stacks_end as usize),
+        map_type: MapType::Identical,
+        permissions: PERMISSION_R | PERMISSION_W | PERMISSION_U,
+        allocated_pages: Vec::new(),
+    };
+
+    kernel_space
+        .push_area(area, true)
+        .expect("Failed to map kernel user stacks area");
+}
+
 fn push_kernel_bss_area(kernel_space: &mut VMSpace) {
     let area = VMArea {
         start_vpn: VPN::from_addr(bss_start as usize),
         end_vpn: VPN::from_addr(bss_end as usize),
         map_type: MapType::Identical,
-        // Requrie PERMISSION_U because we have User stacks in it
-        permissions: PERMISSION_R | PERMISSION_W | PERMISSION_U,
+        permissions: PERMISSION_R | PERMISSION_W,
         allocated_pages: Vec::new(),
     };
 

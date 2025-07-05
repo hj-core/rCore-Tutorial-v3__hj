@@ -21,6 +21,7 @@ const USER_STACK_SIZE: usize = 0x2000; // 8KB
 static mut TASK_KERNEL_STACK: [KernelStack; TASK_MAX_NUMBER] =
     [KernelStack([0u8; KERNEL_STACK_SIZE]); TASK_MAX_NUMBER];
 
+#[unsafe(link_section = ".bss.user_stacks")]
 static mut TASK_USER_STACK: [UserStack; TASK_MAX_NUMBER] =
     [UserStack([0u8; USER_STACK_SIZE]); TASK_MAX_NUMBER];
 
