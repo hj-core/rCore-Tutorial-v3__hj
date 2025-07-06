@@ -1,3 +1,4 @@
+use crate::mm::prelude::VMSpace;
 use crate::timer;
 
 pub(super) const MAX_SYSCALLS_TRACKED: usize = 6;
@@ -6,6 +7,7 @@ pub(super) const MAX_SYSCALLS_TRACKED: usize = 6;
 pub(super) struct TaskControlBlock {
     state: TaskState,
     context: TaskContext,
+    vm_space: VMSpace,
     statistics: TaskStatistics,
 }
 
@@ -14,6 +16,7 @@ impl TaskControlBlock {
         Self {
             state: TaskState::Unused,
             context: TaskContext::new_placeholder(),
+            vm_space: VMSpace::new().expect("Failed to create empty vm space"),
             statistics: TaskStatistics::new_init(),
         }
     }

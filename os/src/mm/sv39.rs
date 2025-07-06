@@ -219,7 +219,7 @@ impl PTE {
 }
 
 #[derive(Debug)]
-pub(super) enum PgtError {
+pub(crate) enum PgtError {
     InvalidVirtualAddress,
     InvalidPhysicalAddress,
     InvalidPteFlags,

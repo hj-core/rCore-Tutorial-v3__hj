@@ -14,12 +14,13 @@ use xmas_elf::{
     program::{self, Flags},
 };
 
-use crate::mm::page_alloc::{PAGE_SIZE_BYTES, PAGE_SIZE_ORDER, PHYS_MEM_START, Page};
-use crate::mm::sv39::{PTE, PgtError, RootPgt};
 use crate::mm::{
     QEMU_VIRT_MMIO, boot_stack_end, boot_stack_start, bss_end, bss_start, data_end, data_start,
-    get_kernel_end, rodata_end, rodata_start, text_end, text_start, user_stacks_end,
-    user_stacks_start,
+    get_kernel_end,
+    page_alloc::{PAGE_SIZE_BYTES, PAGE_SIZE_ORDER, PHYS_MEM_START, Page},
+    rodata_end, rodata_start,
+    sv39::{PTE, PgtError, RootPgt},
+    text_end, text_start, user_stacks_end, user_stacks_start,
 };
 use crate::println;
 use crate::sync::spin::SpinLock;
@@ -298,14 +299,14 @@ pub(super) fn print_kernel_space() {
 /// A collection of related [VMArea]s that are controlled by
 /// the same root page table.
 #[derive(Debug)]
-struct VMSpace {
+pub(crate) struct VMSpace {
     root_pgt: RootPgt,
     areas: Vec<VMArea>,
 }
 
 impl VMSpace {
     /// Returns a new [VMSpace] with a [RootPgt] and no areas.
-    fn new() -> Result<Self, VMError> {
+    pub(crate) fn new() -> Result<Self, VMError> {
         let root_pgt = RootPgt::new().map_err(VMError::CreateRootPgtFailed)?;
         let areas = Vec::new();
         Ok(Self { root_pgt, areas })
@@ -433,7 +434,7 @@ struct VMArea {
 
 /// Virtual Page Number
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub(super) struct VPN(pub(super) usize);
+pub(crate) struct VPN(pub(super) usize);
 
 impl VPN {
     fn from_addr(addr: usize) -> VPN {
@@ -452,7 +453,7 @@ enum MapType {
 
 #[allow(dead_code)]
 #[derive(Debug)]
-enum VMError {
+pub(crate) enum VMError {
     CreateRootPgtFailed(PgtError),
     NoAreaForVpn(VPN),
     AreaVpnMismatch(usize, VPN),
