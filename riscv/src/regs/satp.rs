@@ -1,14 +1,12 @@
-use crate::csrw;
-
 const CSR_NO: usize = 0x180;
 
-/// Configures the `satp` register. Any set bits in `ppn` other
-/// than the lower 44 bits are ignored.
-pub fn enable(ppn: usize, mode: Mode) {
+/// Returns the satp value corresponding to the given `ppn` and
+/// `mode`. Any set bits in `ppn` other than the lower 44 bits
+/// are ignored.
+pub fn compute_value(ppn: usize, mode: Mode) -> usize {
     let ppn = ppn & 0xfff_ffff_ffff;
     let mode_value = get_mode_value(mode);
-    let value = (mode_value << 60) | ppn;
-    csrw!(CSR_NO, value)
+    (mode_value << 60) | ppn
 }
 
 pub enum Mode {
