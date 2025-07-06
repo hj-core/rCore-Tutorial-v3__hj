@@ -22,6 +22,8 @@ const QEMU_VIRT_MMIO: &[(usize, usize)] = &[
 unsafe extern "C" {
     unsafe fn kernel_start();
     unsafe fn text_start();
+    unsafe fn text_trap_start();
+    unsafe fn text_trap_end();
     unsafe fn text_end();
     unsafe fn rodata_start();
     unsafe fn rodata_end();
@@ -64,6 +66,12 @@ pub(crate) fn log_kernel_layout() {
         text_start as usize,
         text_end as usize,
         text_end as usize - text_start as usize
+    );
+    trace!(
+        ".text.trap  [{:#x}, {:#x}) size={}",
+        text_trap_start as usize,
+        text_trap_end as usize,
+        text_trap_end as usize - text_trap_start as usize
     );
     debug!(
         ".rodata     [{:#x}, {:#x}) size={}",

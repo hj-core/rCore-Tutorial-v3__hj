@@ -8,7 +8,7 @@
     ld x\n, \n*8(sp)
 .endm
 
-    .section .text
+    .section .text.trap
     .global __stvec
     .global __restore
     .align 2                  # The lowest two bits are always zero and are overridden by mode

@@ -10,6 +10,13 @@ SECTIONS
     .text : {
         text_start = .;
         *(.text.entry)
+        . = ALIGN(4K);
+
+        text_trap_start = .;
+        *(.text.trap)
+        . = ALIGN(4K);
+        text_trap_end = .;
+
         *(.text .text.*)
         . = ALIGN(4K);
         text_end = .;
