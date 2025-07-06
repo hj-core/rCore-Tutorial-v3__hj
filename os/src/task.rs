@@ -9,6 +9,7 @@ use lazy_static::lazy_static;
 
 use crate::mm::prelude::{
     MapType, PERMISSION_R, PERMISSION_U, PERMISSION_W, VMArea, VMError, VMSpace, VPN, load_elf,
+    push_trap_area,
 };
 use crate::sync::spin::SpinLock;
 use crate::task::{
@@ -132,6 +133,7 @@ fn set_first_run_tcb(task_index: usize) {
     let vm_space = tcb.get_mut_vm_space();
     load_task_elf(vm_space, task_index).expect("Failed to load user elf");
     load_task_user_stack(vm_space, task_index).expect("Failed to load user stack");
+    push_trap_area(vm_space).expect("Failed to push trap area");
 }
 
 fn load_task_elf(space: &mut VMSpace, task_index: usize) -> Result<bool, VMError> {

@@ -15,7 +15,7 @@ use crate::mm::{
     page_alloc::{PAGE_SIZE_BYTES, PAGE_SIZE_ORDER, PHYS_MEM_BYTES, PHYS_MEM_START},
     rodata_end, rodata_start,
     sv39::{PTE, PgtError, RootPgt},
-    text_end, text_start, user_stacks_end, user_stacks_start,
+    text_end, text_start, text_trap_end, text_trap_start, user_stacks_end, user_stacks_start,
 };
 use crate::println;
 use crate::sync::spin::SpinLock;
@@ -266,6 +266,18 @@ fn get_permissions_from_ph_flags(flags: Flags, is_user: bool) -> usize {
     }
 
     result
+}
+
+/// Pushes and eagerly maps the trap area.
+pub(crate) fn push_trap_area(space: &mut VMSpace) -> Result<bool, VMError> {
+    let area = VMArea::new(
+        VPN::from_addr(text_trap_start as usize),
+        VPN::from_addr(text_trap_end as usize),
+        MapType::Identical,
+        PERMISSION_X,
+    );
+
+    space.push_area(area, true)
 }
 
 /// A collection of related [VMArea]s that are controlled by
