@@ -7,12 +7,16 @@ mod runner;
 use core::{array, cmp::min};
 use lazy_static::lazy_static;
 
-use crate::{
-    debug, log,
-    sync::spin::SpinLock,
-    task::control::{TaskControlBlock, TaskState, TaskStatistics},
-    trap::{self, TrapContext},
+use crate::mm::prelude::{
+    MapType, PERMISSION_R, PERMISSION_U, PERMISSION_W, VMArea, VMError, VMSpace, VPN, load_elf,
 };
+use crate::sync::spin::SpinLock;
+use crate::task::{
+    control::{TaskControlBlock, TaskState, TaskStatistics},
+    loader::get_app_elf_bytes,
+};
+use crate::trap::{self, TrapContext};
+use crate::{debug, log};
 
 const TASK_MAX_NUMBER: usize = 8;
 const KERNEL_STACK_SIZE: usize = 0x2000; // 8KB
@@ -109,18 +113,49 @@ fn get_task_entry_addr(task_index: usize) -> usize {
     loader::get_app_entry_ptr(task_index).addr()
 }
 
-/// `set_first_run_tcb` configures the [TaskControlBlock] of the task for its
-/// first run.
+/// `set_first_run_tcb` configures the [TaskControlBlock] of the
+/// task for its first run.
 ///
 /// [TaskControlBlock]: super::control::TaskControlBlock
 fn set_first_run_tcb(task_index: usize) {
     let mut tcb = TASK_CONTROL_BLOCK[task_index].lock();
+    // Configure state
     tcb.change_state(TaskState::Ready);
 
+    // Configure context
     let init_kernel_sp = KernelStack::get_upper_bound(task_index) - size_of::<TrapContext>();
     let context = tcb.get_mut_context();
     context.set_ra(trap::__restore as usize);
     context.set_sp(init_kernel_sp);
+
+    // Configure vm_space
+    let vm_space = tcb.get_mut_vm_space();
+    load_task_elf(vm_space, task_index).expect("Failed to load user elf");
+    load_task_user_stack(vm_space, task_index).expect("Failed to load user stack");
+}
+
+fn load_task_elf(space: &mut VMSpace, task_index: usize) -> Result<bool, VMError> {
+    load_elf(
+        space,
+        get_task_elf_bytes(task_index),
+        true,
+        MapType::Identical,
+    )
+}
+
+fn get_task_elf_bytes<'a>(task_index: usize) -> &'a [u8] {
+    get_app_elf_bytes(task_index)
+}
+
+fn load_task_user_stack(space: &mut VMSpace, task_index: usize) -> Result<bool, VMError> {
+    let area = VMArea::new(
+        VPN::from_addr(UserStack::get_lower_bound(task_index)),
+        VPN::from_addr(UserStack::get_upper_bound(task_index)),
+        MapType::Identical,
+        PERMISSION_R | PERMISSION_W | PERMISSION_U,
+    );
+
+    space.push_area(area, true)
 }
 
 fn debug_print_tcb() {

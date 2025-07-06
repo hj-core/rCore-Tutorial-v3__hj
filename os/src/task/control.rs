@@ -37,6 +37,10 @@ impl TaskControlBlock {
         &mut self.context
     }
 
+    pub(super) fn get_mut_vm_space(&mut self) -> &mut VMSpace {
+        &mut self.vm_space
+    }
+
     pub(super) fn get_statistics(&self) -> TaskStatistics {
         self.statistics
     }

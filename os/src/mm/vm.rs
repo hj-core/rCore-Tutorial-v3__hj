@@ -1,14 +1,9 @@
 extern crate alloc;
 
 use alloc::vec::Vec;
-use core::arch::asm;
 use core::slice;
 
 use lazy_static::lazy_static;
-use riscv::regs::{
-    satp::{self, Mode},
-    sstatus,
-};
 use xmas_elf::{
     ElfFile,
     program::{self, Flags},
@@ -17,32 +12,23 @@ use xmas_elf::{
 use crate::mm::{
     QEMU_VIRT_MMIO, boot_stack_end, boot_stack_start, bss_end, bss_start, data_end, data_start,
     get_kernel_end,
-    page_alloc::{PAGE_SIZE_BYTES, PAGE_SIZE_ORDER, PHYS_MEM_START, Page},
+    page_alloc::{PAGE_SIZE_BYTES, PAGE_SIZE_ORDER, PHYS_MEM_BYTES, PHYS_MEM_START},
     rodata_end, rodata_start,
     sv39::{PTE, PgtError, RootPgt},
     text_end, text_start, user_stacks_end, user_stacks_start,
 };
 use crate::println;
 use crate::sync::spin::SpinLock;
-use crate::task::prelude::{get_app_elf_bytes, get_app_entry_ptr, get_total_apps};
 
 lazy_static! {
     static ref KERNEL_SPACE: SpinLock<VMSpace> = SpinLock::new(create_kernel_space());
 }
 
-const PERMISSION_R: usize = PTE::FLAG_R;
-const PERMISSION_W: usize = PTE::FLAG_W;
-const PERMISSION_X: usize = PTE::FLAG_X;
-const PERMISSION_U: usize = PTE::FLAG_U;
+pub(crate) const PERMISSION_R: usize = PTE::FLAG_R;
+pub(crate) const PERMISSION_W: usize = PTE::FLAG_W;
+pub(crate) const PERMISSION_X: usize = PTE::FLAG_X;
+pub(crate) const PERMISSION_U: usize = PTE::FLAG_U;
 const PERMISSION_ALL_FLAGS: usize = PERMISSION_R | PERMISSION_W | PERMISSION_X | PERMISSION_U;
-
-pub(super) fn enable_satp() {
-    sstatus::set_sum_permit();
-
-    let ppn = KERNEL_SPACE.lock().root_pgt.get_ppn();
-    satp::enable(ppn, Mode::Sv39);
-    unsafe { asm!("sfence.vma") };
-}
 
 /// Creates a [VMSpace] that matches the layout of the kernel.
 ///
@@ -63,7 +49,6 @@ fn create_kernel_space() -> VMSpace {
     push_kernel_user_stacks_area(&mut result);
     push_kernel_bss_area(&mut result);
     push_kernel_memory_area(&mut result);
-    push_kernel_apps_areas(&mut result);
 
     result
 }
@@ -143,7 +128,7 @@ fn push_kernel_user_stacks_area(kernel_space: &mut VMSpace) {
         VPN::from_addr(user_stacks_start as usize),
         VPN::from_addr(user_stacks_end as usize),
         MapType::Identical,
-        PERMISSION_R | PERMISSION_W | PERMISSION_U,
+        PERMISSION_R | PERMISSION_W,
     );
 
     kernel_space
@@ -188,24 +173,28 @@ fn compute_kernel_memory_start_vpn() -> VPN {
 
 /// Returns the exclusive end [VPN] of kernel memory [VMArea].
 fn compute_kernel_memory_end_vpn() -> VPN {
-    assert!(
-        PHYS_MEM_START & (PAGE_SIZE_BYTES - 1) == 0,
+    assert_eq!(
+        PHYS_MEM_START & (PAGE_SIZE_BYTES - 1),
+        0,
         "The algorithm assumes PYHS_MEM_START is page-aligned"
     );
+    assert_eq!(
+        PHYS_MEM_BYTES & (PAGE_SIZE_BYTES - 1),
+        0,
+        "The algorithm assumes PYHS_MEM_BYTES is page-aligned"
+    );
 
-    VPN::from_addr(get_app_entry_ptr(0).addr())
+    VPN::from_addr(PHYS_MEM_START + PHYS_MEM_BYTES)
 }
 
-fn push_kernel_apps_areas(kernel_space: &mut VMSpace) {
-    for app_index in 0..get_total_apps() {
-        let elf_bytes = get_app_elf_bytes(app_index);
-        load_elf(kernel_space, elf_bytes, true, MapType::Identical).expect("Failed to load app");
-    }
+#[allow(dead_code)]
+pub(super) fn print_kernel_space() {
+    println!("KERNEL_SPACE: {:#0x?}", KERNEL_SPACE.lock());
 }
 
-/// Creates [VMArea]s according to the layout specified in the
-/// `elf_input` and pushes them into `space`.
-fn load_elf(
+/// Loads the content of `elf_bytes` into `space`, creating the
+/// necessary [VMArea]s and [PTE]s.
+pub(crate) fn load_elf(
     space: &mut VMSpace,
     elf_bytes: &[u8],
     is_user: bool,
@@ -279,11 +268,6 @@ fn get_permissions_from_ph_flags(flags: Flags, is_user: bool) -> usize {
     result
 }
 
-#[allow(dead_code)]
-pub(super) fn print_kernel_space() {
-    println!("KERNEL_SPACE: {:#0x?}", KERNEL_SPACE.lock());
-}
-
 /// A collection of related [VMArea]s that are controlled by
 /// the same root page table.
 #[derive(Debug)]
@@ -308,7 +292,7 @@ impl VMSpace {
     /// contains the [VPN] causing the failure and the corresponding [PgtError].
     /// However, the `area` would have already been added to `areas`, and
     /// the propagated page tables and entries are not rolled back.
-    fn push_area(&mut self, area: VMArea, eager_mapping: bool) -> Result<bool, VMError> {
+    pub(crate) fn push_area(&mut self, area: VMArea, eager_mapping: bool) -> Result<bool, VMError> {
         if !eager_mapping {
             self.areas.push(area);
             return Ok(true);
@@ -411,23 +395,21 @@ impl VMSpace {
 
 /// An abstraction over a range of virtual memory.
 #[derive(Debug)]
-struct VMArea {
+pub(crate) struct VMArea {
     start_vpn: VPN,
     /// The exclusive end [VPN] of this [VMArea].
     end_vpn: VPN,
     map_type: MapType,
     permissions: usize,
-    allocated_pages: Vec<Page>,
 }
 
 impl VMArea {
-    fn new(start_vpn: VPN, end_vpn: VPN, map_type: MapType, permissions: usize) -> Self {
+    pub(crate) fn new(start_vpn: VPN, end_vpn: VPN, map_type: MapType, permissions: usize) -> Self {
         Self {
             start_vpn,
             end_vpn,
             map_type,
             permissions,
-            allocated_pages: Vec::new(),
         }
     }
 }
@@ -437,7 +419,7 @@ impl VMArea {
 pub(crate) struct VPN(pub(super) usize);
 
 impl VPN {
-    fn from_addr(addr: usize) -> VPN {
+    pub(crate) fn from_addr(addr: usize) -> VPN {
         VPN(addr >> PAGE_SIZE_ORDER)
     }
 
@@ -447,7 +429,7 @@ impl VPN {
 }
 
 #[derive(Debug, Copy, Clone)]
-enum MapType {
+pub(crate) enum MapType {
     Identical,
 }
 
