@@ -62,11 +62,8 @@ impl UserStack {
 }
 
 pub(super) fn start() -> ! {
-    push_all_first_run_trap_contexts();
-    set_all_first_run_tcbs();
-
+    init_all_tasks();
     debug_print_tcb();
-
     runner::init_and_run()
 }
 
@@ -78,12 +75,15 @@ pub(crate) fn get_task_name<'a>(task_index: usize) -> &'a str {
     loader::get_app_name(task_index)
 }
 
-/// `push_all_first_run_trap_contexts` pushes the first run trap context onto the
-/// task's kernel stack for each task.
-fn push_all_first_run_trap_contexts() {
+fn init_all_tasks() {
     for task_index in 0..get_total_tasks() {
-        push_first_run_trap_context(task_index);
+        init_task(task_index);
     }
+}
+
+fn init_task(task_index: usize) {
+    push_first_run_trap_context(task_index);
+    set_first_run_tcb(task_index);
 }
 
 /// `push_first_run_trap_context` pushes the first run trap context onto the task's
@@ -107,16 +107,6 @@ fn push_first_run_trap_context(task_index: usize) {
 
 fn get_task_entry_addr(task_index: usize) -> usize {
     loader::get_app_entry_ptr(task_index).addr()
-}
-
-/// `set_all_first_run_tcbs` configures the [TaskControlBlock] for each task's
-/// first run.
-///
-/// [TaskControlBlock]: super::control::TaskControlBlock
-fn set_all_first_run_tcbs() {
-    for task_index in 0..get_total_tasks() {
-        set_first_run_tcb(task_index);
-    }
 }
 
 /// `set_first_run_tcb` configures the [TaskControlBlock] of the task for its
