@@ -71,12 +71,13 @@ fn create_kernel_space() -> VMSpace {
 fn push_qemu_mmio_areas(kernel_space: &mut VMSpace) {
     QEMU_VIRT_MMIO
         .iter()
-        .map(|&(base, size)| VMArea {
-            start_vpn: VPN::from_addr(base),
-            end_vpn: VPN::from_addr(base + size + PAGE_SIZE_BYTES - 1),
-            map_type: MapType::Identical,
-            permissions: PERMISSION_R | PERMISSION_W,
-            allocated_pages: Vec::new(),
+        .map(|&(base, size)| {
+            VMArea::new(
+                VPN::from_addr(base),
+                VPN::from_addr(base + size + PAGE_SIZE_BYTES - 1),
+                MapType::Identical,
+                PERMISSION_R | PERMISSION_W,
+            )
         })
         .for_each(|area| {
             kernel_space
@@ -86,13 +87,12 @@ fn push_qemu_mmio_areas(kernel_space: &mut VMSpace) {
 }
 
 fn push_kernel_text_area(kernel_space: &mut VMSpace) {
-    let area = VMArea {
-        start_vpn: VPN::from_addr(text_start as usize),
-        end_vpn: VPN::from_addr(text_end as usize),
-        map_type: MapType::Identical,
-        permissions: PERMISSION_R | PERMISSION_X,
-        allocated_pages: Vec::new(),
-    };
+    let area = VMArea::new(
+        VPN::from_addr(text_start as usize),
+        VPN::from_addr(text_end as usize),
+        MapType::Identical,
+        PERMISSION_R | PERMISSION_X,
+    );
 
     kernel_space
         .push_area(area, true)
@@ -100,13 +100,12 @@ fn push_kernel_text_area(kernel_space: &mut VMSpace) {
 }
 
 fn push_kernel_rodata_area(kernel_space: &mut VMSpace) {
-    let area = VMArea {
-        start_vpn: VPN::from_addr(rodata_start as usize),
-        end_vpn: VPN::from_addr(rodata_end as usize),
-        map_type: MapType::Identical,
-        permissions: PERMISSION_R,
-        allocated_pages: Vec::new(),
-    };
+    let area = VMArea::new(
+        VPN::from_addr(rodata_start as usize),
+        VPN::from_addr(rodata_end as usize),
+        MapType::Identical,
+        PERMISSION_R,
+    );
 
     kernel_space
         .push_area(area, true)
@@ -114,13 +113,12 @@ fn push_kernel_rodata_area(kernel_space: &mut VMSpace) {
 }
 
 fn push_kernel_data_area(kernel_space: &mut VMSpace) {
-    let area = VMArea {
-        start_vpn: VPN::from_addr(data_start as usize),
-        end_vpn: VPN::from_addr(data_end as usize),
-        map_type: MapType::Identical,
-        permissions: PERMISSION_R | PERMISSION_W,
-        allocated_pages: Vec::new(),
-    };
+    let area = VMArea::new(
+        VPN::from_addr(data_start as usize),
+        VPN::from_addr(data_end as usize),
+        MapType::Identical,
+        PERMISSION_R | PERMISSION_W,
+    );
 
     kernel_space
         .push_area(area, true)
@@ -128,13 +126,12 @@ fn push_kernel_data_area(kernel_space: &mut VMSpace) {
 }
 
 fn push_kernel_boot_stack_area(kernel_space: &mut VMSpace) {
-    let area = VMArea {
-        start_vpn: VPN::from_addr(boot_stack_start as usize),
-        end_vpn: VPN::from_addr(boot_stack_end as usize),
-        map_type: MapType::Identical,
-        permissions: PERMISSION_R | PERMISSION_W,
-        allocated_pages: Vec::new(),
-    };
+    let area = VMArea::new(
+        VPN::from_addr(boot_stack_start as usize),
+        VPN::from_addr(boot_stack_end as usize),
+        MapType::Identical,
+        PERMISSION_R | PERMISSION_W,
+    );
 
     kernel_space
         .push_area(area, true)
@@ -142,13 +139,12 @@ fn push_kernel_boot_stack_area(kernel_space: &mut VMSpace) {
 }
 
 fn push_kernel_user_stacks_area(kernel_space: &mut VMSpace) {
-    let area = VMArea {
-        start_vpn: VPN::from_addr(user_stacks_start as usize),
-        end_vpn: VPN::from_addr(user_stacks_end as usize),
-        map_type: MapType::Identical,
-        permissions: PERMISSION_R | PERMISSION_W | PERMISSION_U,
-        allocated_pages: Vec::new(),
-    };
+    let area = VMArea::new(
+        VPN::from_addr(user_stacks_start as usize),
+        VPN::from_addr(user_stacks_end as usize),
+        MapType::Identical,
+        PERMISSION_R | PERMISSION_W | PERMISSION_U,
+    );
 
     kernel_space
         .push_area(area, true)
@@ -156,13 +152,12 @@ fn push_kernel_user_stacks_area(kernel_space: &mut VMSpace) {
 }
 
 fn push_kernel_bss_area(kernel_space: &mut VMSpace) {
-    let area = VMArea {
-        start_vpn: VPN::from_addr(bss_start as usize),
-        end_vpn: VPN::from_addr(bss_end as usize),
-        map_type: MapType::Identical,
-        permissions: PERMISSION_R | PERMISSION_W,
-        allocated_pages: Vec::new(),
-    };
+    let area = VMArea::new(
+        VPN::from_addr(bss_start as usize),
+        VPN::from_addr(bss_end as usize),
+        MapType::Identical,
+        PERMISSION_R | PERMISSION_W,
+    );
 
     kernel_space
         .push_area(area, true)
@@ -170,13 +165,12 @@ fn push_kernel_bss_area(kernel_space: &mut VMSpace) {
 }
 
 fn push_kernel_memory_area(kernel_space: &mut VMSpace) {
-    let area = VMArea {
-        start_vpn: compute_kernel_memory_start_vpn(),
-        end_vpn: compute_kernel_memory_end_vpn(),
-        map_type: MapType::Identical,
-        permissions: PERMISSION_R | PERMISSION_W,
-        allocated_pages: Vec::new(),
-    };
+    let area = VMArea::new(
+        compute_kernel_memory_start_vpn(),
+        compute_kernel_memory_end_vpn(),
+        MapType::Identical,
+        PERMISSION_R | PERMISSION_W,
+    );
 
     kernel_space
         .push_area(area, true)
@@ -266,13 +260,7 @@ fn create_area_from_ph(
     let end_vpn = VPN::from_addr(va_start + mem_size + PAGE_SIZE_BYTES - 1);
     let permissions = get_permissions_from_ph_flags(ph.flags(), is_user);
 
-    Ok(VMArea {
-        start_vpn,
-        end_vpn,
-        map_type,
-        permissions,
-        allocated_pages: Vec::new(),
-    })
+    Ok(VMArea::new(start_vpn, end_vpn, map_type, permissions))
 }
 
 fn get_permissions_from_ph_flags(flags: Flags, is_user: bool) -> usize {
@@ -430,6 +418,18 @@ struct VMArea {
     map_type: MapType,
     permissions: usize,
     allocated_pages: Vec<Page>,
+}
+
+impl VMArea {
+    fn new(start_vpn: VPN, end_vpn: VPN, map_type: MapType, permissions: usize) -> Self {
+        Self {
+            start_vpn,
+            end_vpn,
+            map_type,
+            permissions,
+            allocated_pages: Vec::new(),
+        }
+    }
 }
 
 /// Virtual Page Number
