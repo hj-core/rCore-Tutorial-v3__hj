@@ -31,8 +31,10 @@ unsafe extern "C" {
     unsafe fn data_end();
     unsafe fn boot_stack_start();
     unsafe fn boot_stack_end();
-    unsafe fn user_stacks_start();
-    unsafe fn user_stacks_end();
+    unsafe fn task_kernel_stacks_start();
+    unsafe fn task_kernel_stacks_end();
+    unsafe fn task_user_stacks_start();
+    unsafe fn task_user_stacks_end();
     unsafe fn bss_start();
     unsafe fn bss_end();
     unsafe fn kernel_end();
@@ -92,10 +94,16 @@ pub(crate) fn log_kernel_layout() {
         boot_stack_end as usize - boot_stack_start as usize
     );
     warn!(
-        ".user_stacks [{:#x}, {:#x}) size={}",
-        user_stacks_start as usize,
-        user_stacks_end as usize,
-        user_stacks_end as usize - user_stacks_start as usize
+        ".task_user_stacks [{:#x}, {:#x}) size={}",
+        task_kernel_stacks_start as usize,
+        task_kernel_stacks_end as usize,
+        task_kernel_stacks_end as usize - task_kernel_stacks_start as usize
+    );
+    warn!(
+        ".task_user_stacks [{:#x}, {:#x}) size={}",
+        task_user_stacks_start as usize,
+        task_user_stacks_end as usize,
+        task_user_stacks_end as usize - task_user_stacks_start as usize
     );
     error!(
         ".bss        [{:#x}, {:#x}) size={}",

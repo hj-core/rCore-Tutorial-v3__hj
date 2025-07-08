@@ -42,10 +42,15 @@ SECTIONS
         *(.bss.boot_stack)
         . = ALIGN(4K);
 
-        user_stacks_start = .;
-        *(.bss.user_stacks)
+        task_kernel_stacks_start = .;
+        *(.bss.task_kernel_stacks)
         . = ALIGN(4K);
-        user_stacks_end = .;
+        task_kernel_stacks_end = .;
+
+        task_user_stacks_start = .;
+        *(.bss.task_user_stacks)
+        . = ALIGN(4K);
+        task_user_stacks_end = .;
 
         bss_start = .;
         *(.bss .bss.*)

@@ -23,10 +23,11 @@ const TASK_MAX_NUMBER: usize = 8;
 const KERNEL_STACK_SIZE: usize = 0x2000; // 8KB
 const USER_STACK_SIZE: usize = 0x2000; // 8KB
 
+#[unsafe(link_section = ".bss.task_kernel_stacks")]
 static mut TASK_KERNEL_STACK: [KernelStack; TASK_MAX_NUMBER] =
     [KernelStack([0u8; KERNEL_STACK_SIZE]); TASK_MAX_NUMBER];
 
-#[unsafe(link_section = ".bss.user_stacks")]
+#[unsafe(link_section = ".bss.task_user_stacks")]
 static mut TASK_USER_STACK: [UserStack; TASK_MAX_NUMBER] =
     [UserStack([0u8; USER_STACK_SIZE]); TASK_MAX_NUMBER];
 
@@ -46,6 +47,10 @@ impl KernelStack {
             let ptr = &raw const TASK_KERNEL_STACK[task_index].0 as *const u8;
             ptr.add(KERNEL_STACK_SIZE) as usize
         }
+    }
+
+    fn get_lower_bound(task_index: usize) -> usize {
+        unsafe { (&raw const TASK_KERNEL_STACK[task_index].0).addr() }
     }
 }
 
@@ -132,7 +137,7 @@ fn set_first_run_tcb(task_index: usize) {
     // Configure vm_space
     let vm_space = tcb.get_mut_vm_space();
     load_task_elf(vm_space, task_index).expect("Failed to load user elf");
-    load_task_user_stack(vm_space, task_index).expect("Failed to load user stack");
+    push_task_stack_areas(vm_space, task_index).expect("Failed to push task stack areas");
     push_trap_area(vm_space).expect("Failed to push trap area");
 }
 
@@ -149,15 +154,24 @@ fn get_task_elf_bytes<'a>(task_index: usize) -> &'a [u8] {
     get_app_elf_bytes(task_index)
 }
 
-fn load_task_user_stack(space: &mut VMSpace, task_index: usize) -> Result<bool, VMError> {
-    let area = VMArea::new(
+fn push_task_stack_areas(space: &mut VMSpace, task_index: usize) -> Result<bool, VMError> {
+    let user_stack_area = VMArea::new(
         VPN::from_addr(UserStack::get_lower_bound(task_index)),
         VPN::from_addr(UserStack::get_upper_bound(task_index)),
         MapType::Identical,
         PERMISSION_R | PERMISSION_W | PERMISSION_U,
     );
+    space.push_area(user_stack_area, true)?;
 
-    space.push_area(area, true)
+    let kernel_stack_area = VMArea::new(
+        VPN::from_addr(KernelStack::get_lower_bound(task_index)),
+        VPN::from_addr(KernelStack::get_upper_bound(task_index)),
+        MapType::Identical,
+        PERMISSION_R | PERMISSION_W,
+    );
+    space.push_area(kernel_stack_area, true)?;
+
+    Ok(true)
 }
 
 fn debug_print_tcb() {

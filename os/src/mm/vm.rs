@@ -15,7 +15,8 @@ use crate::mm::{
     page_alloc::{PAGE_SIZE_BYTES, PAGE_SIZE_ORDER, PHYS_MEM_BYTES, PHYS_MEM_START},
     rodata_end, rodata_start,
     sv39::{PTE, PgtError, RootPgt},
-    text_end, text_start, text_trap_end, text_trap_start, user_stacks_end, user_stacks_start,
+    task_kernel_stacks_end, task_kernel_stacks_start, task_user_stacks_end, task_user_stacks_start,
+    text_end, text_start, text_trap_end, text_trap_start,
 };
 use crate::println;
 use crate::sync::spin::SpinLock;
@@ -46,7 +47,8 @@ fn create_kernel_space() -> VMSpace {
     push_kernel_rodata_area(&mut result);
     push_kernel_data_area(&mut result);
     push_kernel_boot_stack_area(&mut result);
-    push_kernel_user_stacks_area(&mut result);
+    push_kernel_task_kernel_stacks_area(&mut result);
+    push_kernel_task_user_stacks_area(&mut result);
     push_kernel_bss_area(&mut result);
     push_kernel_memory_area(&mut result);
 
@@ -123,17 +125,30 @@ fn push_kernel_boot_stack_area(kernel_space: &mut VMSpace) {
         .expect("Failed to map kernel boot stack area");
 }
 
-fn push_kernel_user_stacks_area(kernel_space: &mut VMSpace) {
+fn push_kernel_task_kernel_stacks_area(kernel_space: &mut VMSpace) {
     let area = VMArea::new(
-        VPN::from_addr(user_stacks_start as usize),
-        VPN::from_addr(user_stacks_end as usize),
+        VPN::from_addr(task_kernel_stacks_start as usize),
+        VPN::from_addr(task_kernel_stacks_end as usize),
         MapType::Identical,
         PERMISSION_R | PERMISSION_W,
     );
 
     kernel_space
         .push_area(area, true)
-        .expect("Failed to map kernel user stacks area");
+        .expect("Failed to map kernel task kernel stacks area");
+}
+
+fn push_kernel_task_user_stacks_area(kernel_space: &mut VMSpace) {
+    let area = VMArea::new(
+        VPN::from_addr(task_user_stacks_start as usize),
+        VPN::from_addr(task_user_stacks_end as usize),
+        MapType::Identical,
+        PERMISSION_R | PERMISSION_W,
+    );
+
+    kernel_space
+        .push_area(area, true)
+        .expect("Failed to map kernel task user stacks area");
 }
 
 fn push_kernel_bss_area(kernel_space: &mut VMSpace) {
