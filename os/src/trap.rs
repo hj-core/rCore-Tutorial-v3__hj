@@ -30,16 +30,25 @@ pub struct TrapContext {
     x: [usize; 32],
     sstatus: usize,
     sepc: usize,
+    kernel_satp: usize,
+    user_satp: usize,
 }
 
 impl TrapContext {
-    pub fn new_init_context(entry_addr: usize, user_sp: usize) -> Self {
+    pub fn new_init_context(
+        entry_addr: usize,
+        user_sp: usize,
+        kernel_satp: usize,
+        user_satp: usize,
+    ) -> Self {
         let sstatus = sstatus::set_spp_user();
 
         let mut result = Self {
             x: [0; 32],
             sstatus,
             sepc: entry_addr,
+            kernel_satp,
+            user_satp,
         };
         result.x[2] = user_sp;
         result

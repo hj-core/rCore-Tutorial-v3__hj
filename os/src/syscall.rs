@@ -3,8 +3,8 @@ use core::{slice, str};
 use crate::{
     info, log, print,
     task::prelude::{
-        TaskInfo, TaskState, can_task_read_addr, exchange_recent_task_state, get_recent_task_index,
-        get_task_info, get_task_name, run_next_task,
+        TaskInfo, TaskState, exchange_recent_task_state, get_recent_task_index, get_task_info,
+        get_task_name, run_next_task,
     },
     warn,
 };
@@ -35,16 +35,6 @@ fn sys_write(fd: usize, buf: *const u8, count: usize) -> isize {
         warn!(
             "Task {{ index: {}, name: {} }} attempted to write to unsupported file descriptor {}",
             task_index, task_name, fd
-        );
-        return -1;
-    }
-
-    if !can_task_read_addr(task_index, buf.addr())
-        || !can_task_read_addr(task_index, buf.addr() + count - 1)
-    {
-        warn!(
-            "Task {{ index: {}, name: {} }} attempted to read a memory address without permission",
-            task_index, task_name
         );
         return -1;
     }
@@ -92,19 +82,6 @@ fn sys_yield() -> isize {
 }
 
 fn sys_task_info(task_index: usize, data: *mut TaskInfo) -> isize {
-    let curr_task_index = get_recent_task_index();
-
-    if !can_task_read_addr(curr_task_index, data.addr())
-        || !can_task_read_addr(curr_task_index, data.addr() + size_of::<TaskInfo>() - 1)
-    {
-        warn!(
-            "Task {{ index: {}, name: {} }} attempted to read a memory address without permission",
-            curr_task_index,
-            get_task_name(curr_task_index)
-        );
-        return -1;
-    }
-
     let task_info = get_task_info(task_index);
     unsafe { data.write(task_info) }
     0

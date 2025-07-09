@@ -8,8 +8,8 @@ use core::{array, cmp::min};
 use lazy_static::lazy_static;
 
 use crate::mm::prelude::{
-    MapType, PERMISSION_R, PERMISSION_U, PERMISSION_W, VMArea, VMError, VMSpace, VPN, load_elf,
-    push_trap_area,
+    MapType, PERMISSION_R, PERMISSION_U, PERMISSION_W, VMArea, VMError, VMSpace, VPN,
+    get_kernel_satp, load_elf, push_trap_area,
 };
 use crate::sync::spin::SpinLock;
 use crate::task::{
@@ -92,16 +92,21 @@ fn init_all_tasks() {
 }
 
 fn init_task(task_index: usize) {
-    push_first_run_trap_context(task_index);
     set_first_run_tcb(task_index);
+
+    let kernel_satp = get_kernel_satp();
+    let user_satp = TASK_CONTROL_BLOCK[task_index].lock().get_user_satp();
+    push_first_run_trap_context(task_index, kernel_satp, user_satp);
 }
 
 /// `push_first_run_trap_context` pushes the first run trap context onto the task's
 /// kernel stack.
-fn push_first_run_trap_context(task_index: usize) {
+fn push_first_run_trap_context(task_index: usize, kernel_satp: usize, user_satp: usize) {
     let init_context = TrapContext::new_init_context(
         get_task_entry_addr(task_index),
         UserStack::get_upper_bound(task_index),
+        kernel_satp,
+        user_satp,
     );
 
     let mut kernel_sp = KernelStack::get_upper_bound(task_index) as *mut TrapContext;
@@ -179,16 +184,6 @@ fn debug_print_tcb() {
         let tcb = TASK_CONTROL_BLOCK[i].lock();
         debug!("TCB {}: {:#?}", i, tcb);
     }
-}
-
-pub(crate) fn can_task_read_addr(task_index: usize, addr: usize) -> bool {
-    in_task_user_stack(task_index, addr) || loader::is_app_installed_data(task_index, addr)
-}
-
-fn in_task_user_stack(task_index: usize, addr: usize) -> bool {
-    let lower_bound = UserStack::get_lower_bound(task_index);
-    let upper_bound = UserStack::get_upper_bound(task_index);
-    lower_bound <= addr && addr < upper_bound
 }
 
 /// `exchange_recent_task_state` changes the state of the most recent task to

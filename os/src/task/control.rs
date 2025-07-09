@@ -79,6 +79,10 @@ impl TaskControlBlock {
     pub(super) fn record_syscall(&mut self, syscall_id: usize) -> bool {
         self.statistics.increase_syscall_count(syscall_id)
     }
+
+    pub(super) fn get_user_satp(&self) -> usize {
+        self.vm_space.get_satp()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

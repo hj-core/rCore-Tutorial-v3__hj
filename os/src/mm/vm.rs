@@ -31,6 +31,10 @@ pub(crate) const PERMISSION_X: usize = PTE::FLAG_X;
 pub(crate) const PERMISSION_U: usize = PTE::FLAG_U;
 const PERMISSION_ALL_FLAGS: usize = PERMISSION_R | PERMISSION_W | PERMISSION_X | PERMISSION_U;
 
+pub(crate) fn get_kernel_satp() -> usize {
+    KERNEL_SPACE.lock().get_satp()
+}
+
 /// Creates a [VMSpace] that matches the layout of the kernel.
 ///
 /// It eagerly propagates the page table entries according to its
@@ -309,6 +313,10 @@ impl VMSpace {
         let root_pgt = RootPgt::new().map_err(VMError::CreateRootPgtFailed)?;
         let areas = Vec::new();
         Ok(Self { root_pgt, areas })
+    }
+
+    pub(crate) fn get_satp(&self) -> usize {
+        self.root_pgt.get_satp()
     }
 
     /// Push the `area` to this [VMSpace]. If `eager_mapping` is true,

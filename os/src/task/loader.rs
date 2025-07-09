@@ -107,23 +107,6 @@ pub(crate) fn get_app_entry_ptr(app_index: usize) -> *mut u8 {
     unsafe { APP_ENTRY_PTR_0.add(app_index * APP_MAX_SIZE) }
 }
 
-/// Returns whether the address is within the range of installed
-/// app data.
-///
-/// # Warning
-/// * To be deprecated when virtual address for user space is
-/// implemented.
-pub(super) fn is_app_installed_data(app_index: usize, addr: usize) -> bool {
-    let app_size = get_app_elf_end(app_index) - get_app_elf_start(app_index);
-    if app_size == 0 {
-        return false;
-    }
-
-    let app_entry_addr = get_app_entry_ptr(app_index).addr();
-    let installed_range = app_entry_addr..(app_entry_addr + app_size);
-    installed_range.contains(&addr)
-}
-
 pub(crate) fn log_app_elfs_layout() {
     let total_apps = get_total_apps();
 

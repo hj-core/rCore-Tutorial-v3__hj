@@ -2,6 +2,7 @@ extern crate alloc;
 use core::slice;
 
 use alloc::vec::Vec;
+use riscv::regs::satp::{self, Mode};
 
 use crate::mm::page_alloc::{self, Page};
 
@@ -85,8 +86,8 @@ impl RootPgt {
         })
     }
 
-    pub(super) fn get_ppn(&self) -> usize {
-        self.ppn
+    pub(super) fn get_satp(&self) -> usize {
+        satp::compute_value(self.ppn, Mode::Sv39)
     }
 
     /// Returns a slice over the physical page corresponding to the

@@ -32,9 +32,18 @@ __stvec:
     sd x7, 2*8(sp)
 
     mv x10, sp                # Set the arugment for trap_handler, i.e., a pointer to the saved context
+
+    ld x5, 34*8(sp)           # Switch to kernel satp
+    csrw satp, x5
+    sfence.vma
+
     call trap_handler
 
 __restore:
+    ld x5, 35*8(sp)           # Switch to user satp
+    csrw satp, x5
+    sfence.vma
+
     ld x5, 32*8(sp)           # Restore the sstatus, sepc and sscratch
     ld x6, 33*8(sp)
     ld x7, 2*8(sp)

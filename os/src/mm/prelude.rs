@@ -9,5 +9,6 @@ pub(crate) use super::vm::VMArea;
 pub(crate) use super::vm::VMError;
 pub(crate) use super::vm::VMSpace;
 pub(crate) use super::vm::VPN;
+pub(crate) use super::vm::get_kernel_satp;
 pub(crate) use super::vm::load_elf;
 pub(crate) use super::vm::push_trap_area;

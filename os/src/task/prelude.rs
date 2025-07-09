@@ -1,5 +1,4 @@
 pub(crate) use super::TaskInfo;
-pub(crate) use super::can_task_read_addr;
 pub(crate) use super::exchange_recent_task_state;
 pub(crate) use super::get_task_info;
 pub(crate) use super::get_task_name;
