@@ -34,7 +34,7 @@ fn is_valid_va(va: usize) -> bool {
     va & mask == 0 || va & mask == mask
 }
 
-/// Returns an array of VPN_2, VPN_1, VPN_0 and page_offset according
+/// Returns an array of VPN_0, VPN_1, VPN_2 and page_offset according
 /// to the Sv39 scheme, or a [PgtError] if the `va` is invalid.
 fn parse_virtual_addr(va: usize) -> Result<[usize; 4], PgtError> {
     if !is_valid_va(va) {
@@ -46,7 +46,7 @@ fn parse_virtual_addr(va: usize) -> Result<[usize; 4], PgtError> {
     let vpn_0 = (va >> 12) & 0x1ff;
     let page_offset = va & 0xfff;
 
-    Ok([vpn_2, vpn_1, vpn_0, page_offset])
+    Ok([vpn_0, vpn_1, vpn_2, page_offset])
 }
 
 /// Abstraction of the root page table for the Page-Based 39-bit
@@ -122,28 +122,28 @@ impl RootPgt {
         let mut table = unsafe { Self::as_mut_slice_from_ppn(self.ppn) };
 
         // Walk to the leaf table
-        for step in 0..2 {
-            if !table[va[step]].is_valid() {
+        for level in [2, 1] {
+            if !table[va[level]].is_valid() {
                 let page = acquire_zeroed_page()?;
-                table[va[step]] = PTE::new(page.get_physical_addr(), PTE::FLAG_V)?;
+                table[va[level]] = PTE::new(page.get_physical_addr(), PTE::FLAG_V)?;
                 self.pages.push(page);
             }
 
-            if table[va[step]].is_leaf() {
+            if table[va[level]].is_leaf() {
                 return Err(PgtError::HugePageNotSupported);
             }
 
             // SAFETY:
             // The page table entry must be valid and point to a physical page
             // holding a page table; therefore, we can cast a slice over it.
-            table = unsafe { RootPgt::as_mut_slice_from_ppn(table[va[step]].get_ppn()) };
+            table = unsafe { RootPgt::as_mut_slice_from_ppn(table[va[level]].get_ppn()) };
         }
 
         // Update the leaf table
-        if table[va[2]].is_valid() {
+        if table[va[0]].is_valid() {
             return Err(PgtError::DoubleMapping);
         }
-        table[va[2]] = leaf_pte;
+        table[va[0]] = leaf_pte;
 
         Ok(true)
     }
