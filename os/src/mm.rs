@@ -94,7 +94,7 @@ pub(crate) fn log_kernel_layout() {
         boot_stack_end as usize - boot_stack_start as usize
     );
     warn!(
-        ".task_user_stacks [{:#x}, {:#x}) size={}",
+        ".task_kernel_stacks [{:#x}, {:#x}) size={}",
         task_kernel_stacks_start as usize,
         task_kernel_stacks_end as usize,
         task_kernel_stacks_end as usize - task_kernel_stacks_start as usize
