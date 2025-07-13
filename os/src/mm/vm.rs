@@ -366,7 +366,7 @@ impl VMSpace {
     fn map(&mut self, vpn: VPN, area_id: usize, data: Option<&[u8]>) -> Result<bool, VMError> {
         let area = self.get_area(area_id)?;
         if vpn < area.start_vpn || vpn >= area.end_vpn {
-            return Err(VMError::AreaVpnMismatch(area_id, vpn));
+            return Err(VMError::VpnNotInArea(vpn, area_id));
         }
 
         let map_type = area.map_type;
@@ -399,7 +399,7 @@ impl VMSpace {
 
         self.root_pgt
             .map_create(va, pa, pte_flags)
-            .map_err(|pgt_err| VMError::MappingError(vpn, pgt_err))?;
+            .map_err(|pgt_err| VMError::PgtMappingError(vpn, pgt_err))?;
 
         if let Some(data) = data {
             unsafe { Self::copy_data(pa, data) };
@@ -473,10 +473,10 @@ pub(crate) enum MapType {
 pub(crate) enum VMError {
     CreateRootPgtFailed(PgtError),
     NoAreaForVpn(VPN),
-    AreaVpnMismatch(usize, VPN),
+    VpnNotInArea(VPN, usize),
     InvalidAreaId(usize),
     InvalidPermissions(usize),
-    MappingError(VPN, PgtError),
+    PgtMappingError(VPN, PgtError),
     DataExceedPage(VPN),
     ParseElfFailed(&'static str),
     DataNotPageAligned(usize),
