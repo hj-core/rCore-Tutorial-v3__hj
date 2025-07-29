@@ -21,11 +21,11 @@ impl TaskInfo {
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TaskState {
-    Unused,
     Ready,
     Running,
     Killed,
     Exited,
+    Unused,
 }
 
 #[allow(dead_code)]

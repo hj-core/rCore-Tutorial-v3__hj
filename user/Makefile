@@ -26,18 +26,18 @@ OBJCOPY := rust-objcopy --binary-architecture=riscv64
 QEMU := qemu-riscv64
 
 # Targets
+.PHONY: build
 build:
 	@python3 build.py $(MODE_ARG) --bin
-.PHONY: build
 
+.PHONY: clean
 clean:
 	@cargo clean
 	@rm src/linker.ld
-.PHONY: clean
 
+.PHONY: run
 run: build
 	@$(foreach elf, $(ELFS), \
 		echo "> Running $(patsubst $(APP_ELF_DIR)/%, %, $(elf)):"; \
 		$(QEMU) $(elf); \
 	)
-.PHONY: run

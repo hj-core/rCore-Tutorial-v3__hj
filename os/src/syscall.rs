@@ -1,13 +1,12 @@
 use core::{slice, str};
 
-use crate::{
-    info, log, print,
-    task::prelude::{
-        TaskInfo, TaskState, exchange_recent_task_state, get_recent_task_index, get_task_info,
-        get_task_name, run_next_task,
-    },
-    warn,
+use riscv::regs::sstatus;
+
+use crate::task::prelude::{
+    TaskInfo, TaskState, exchange_current_task_state, get_current_task_id, get_task_info,
+    run_next_task,
 };
+use crate::{info, log, print, warn};
 
 const SYSCALL_WRITE: usize = 64;
 const SYSCALL_EXIT: usize = 93;
@@ -28,61 +27,56 @@ pub fn syscall_handler(syscall_id: usize, args: [usize; 3]) -> isize {
 }
 
 fn sys_write(fd: usize, buf: *const u8, count: usize) -> isize {
-    let task_index = get_recent_task_index();
-    let task_name = get_task_name(task_index);
-
     if fd != FD_STDOUT {
+        let task_id = get_current_task_id();
         warn!(
-            "Task {{ index: {}, name: {} }} attempted to write to unsupported file descriptor {}",
-            task_index, task_name, fd
+            "Task {:?} attempted write to an unsupported file descriptor {}",
+            task_id, fd
         );
         return -1;
     }
 
+    sstatus::set_sum_permit();
     let buf = unsafe { slice::from_raw_parts(buf, count) };
     let str = str::from_utf8(buf).unwrap();
     print!("{str}");
+    sstatus::set_sum_deny();
     count as isize
 }
 
 fn sys_exit(exit_code: isize) -> isize {
-    let task_index = get_recent_task_index();
-    let task_name = get_task_name(task_index);
+    let task_id = get_current_task_id().expect("sys_exit when no task is running");
 
-    let state = exchange_recent_task_state(TaskState::Running, TaskState::Exited);
+    let state = exchange_current_task_state(TaskState::Running, TaskState::Exited);
     if let Err(state) = state {
-        panic!(
-            "Task {{ index: {}, name: {} }} expected Running but got {:?}",
-            task_index, task_name, state
-        )
+        panic!("Task {:?}: Expected running but got {:?}", task_id, state)
     }
 
-    info!(
-        "Task {{ index: {}, name: {} }} exited with code {}",
-        task_index, task_name, exit_code
-    );
+    info!("Task {:?}: Exited with code {}", task_id, exit_code);
     run_next_task();
     exit_code
 }
 
 fn sys_yield() -> isize {
-    let task_index = get_recent_task_index();
-    let task_name = get_task_name(task_index);
+    let task_id = get_current_task_id().expect("sys_yield when no task is running");
 
-    let state = exchange_recent_task_state(TaskState::Running, TaskState::Ready);
+    let state = exchange_current_task_state(TaskState::Running, TaskState::Ready);
     if let Err(state) = state {
-        panic!(
-            "Task {{ index: {}, name: {} }} expected Running but got {:?}",
-            task_index, task_name, state
-        )
+        panic!("Task {:?}: Expected running but got {:?}", task_id, state)
     }
 
+    info!("Task {:?}: Yield", task_id);
     run_next_task();
     0
 }
 
-fn sys_task_info(task_index: usize, data: *mut TaskInfo) -> isize {
-    let task_info = get_task_info(task_index);
-    unsafe { data.write(task_info) }
-    0
+fn sys_task_info(task_id: usize, data: *mut TaskInfo) -> isize {
+    if let Some(task_info) = get_task_info(task_id) {
+        sstatus::set_sum_permit();
+        unsafe { data.write(task_info) }
+        sstatus::set_sum_deny();
+        0
+    } else {
+        -1
+    }
 }

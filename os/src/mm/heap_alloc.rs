@@ -3,10 +3,9 @@ extern crate alloc;
 use alloc::vec::Vec;
 use buddy_system_allocator::LockedHeap;
 
-use crate::mm::{bss_end, bss_start};
+use crate::mm::{KERNEL_HEAP_SIZE_BYTES, bss_end, bss_start};
 
-static KERNEL_HEAP_SIZE: usize = 4 * 1024 * 1024;
-static mut KERNEL_HEAP: [u8; KERNEL_HEAP_SIZE] = [0; KERNEL_HEAP_SIZE];
+static mut KERNEL_HEAP: [u8; KERNEL_HEAP_SIZE_BYTES] = [0; KERNEL_HEAP_SIZE_BYTES];
 
 #[global_allocator]
 static HEAP_ALLOCATOR: LockedHeap<23> = LockedHeap::empty();
@@ -15,7 +14,7 @@ pub(super) fn init() {
     unsafe {
         HEAP_ALLOCATOR
             .lock()
-            .init((&raw const KERNEL_HEAP).addr(), KERNEL_HEAP_SIZE);
+            .init((&raw const KERNEL_HEAP).addr(), KERNEL_HEAP_SIZE_BYTES);
     }
 }
 

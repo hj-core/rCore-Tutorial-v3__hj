@@ -26,9 +26,9 @@ pub fn rust_main() -> ! {
 
     log::init();
     mm_p::log_kernel_layout();
-    task_p::log_app_elfs_layout();
+    task_p::log_app_elfs();
 
     trap::init();
 
-    task::start();
+    task_p::start();
 }

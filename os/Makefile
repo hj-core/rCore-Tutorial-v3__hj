@@ -23,7 +23,7 @@ QEMU := qemu-system-riscv64
 QEMU_ARGS := -machine virt \
             -nographic \
 			-bios $(BOOTLOADER) \
-			-device loader,file=$(KERNEL_BIN),addr=$(KERNEL_BASE)
+			-device loader,file=$(KERNEL_ELF)
 
 # Variables_gdb
 GDB := gdb-multiarch
@@ -32,45 +32,45 @@ GDB_ARGS := -ex 'file $(KERNEL_ELF)' \
 			-ex 'target remote localhost:1234'
 
 # Targets
+.PHONY: build
 build: build_user
 	@cargo build $(MODE_ARG)
 	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $(KERNEL_BIN)
-.PHONY: build
 
+.PHONY: build_user
 build_user:
 	@$(MAKE) -C $(USER_DIR) MODE=$(MODE) build
-.PHONY: build_user
 
+.PHONY: clean
 clean: clean_user
 	@cargo clean
 	@rm -f $(KERNEL_BIN) $(OBJDUMP_TMP)
 	@rm -f $(APPS_ASM)
-.PHONY: clean
 
+.PHONY: clean_user
 clean_user:
 	@$(MAKE) -C $(USER_DIR) clean
-.PHONY: clean_user
 
+.PHONY: run
 run: build
 	@$(QEMU) $(QEMU_ARGS)
-.PHONY: run
 
+.PHONY: debug
 debug: build
 	@tmux new-session -d \
 	"$(QEMU) $(QEMU_ARGS) -s -S" && \
 	tmux split-window -h "$(GDB) $(GDB_ARGS)" && \
 	tmux -2 attach-session -d
-.PHONY: debug
 
+.PHONY: gdbc
 gdbc:
 	@$(GDB) $(GDB_ARGS)
-.PHONY: gdbc
 
+.PHONY: gdbs
 gdbs: build
 	@$(QEMU) $(QEMU_ARGS) -s -S
-.PHONY: gdbs
 
+.PHONY: disasm
 disasm: build
 	@$(OBJDUMP) $(OBJDUMP_ARGS) $(KERNEL_ELF) > $(OBJDUMP_TMP)
 	@vim $(OBJDUMP_TMP)
-.PHONY: disasm

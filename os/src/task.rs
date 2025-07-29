@@ -1,231 +1,220 @@
+extern crate alloc;
+
+mod apps;
 pub(crate) mod prelude;
+mod state;
 
-mod control;
-mod loader;
-mod runner;
+use alloc::vec::Vec;
+use core::arch::{asm, global_asm};
+use core::ptr::null_mut;
 
-use core::{array, cmp::min};
-use lazy_static::lazy_static;
-
-use crate::mm::prelude::{
-    MapType, PERMISSION_R, PERMISSION_U, PERMISSION_W, VMArea, VMError, VMSpace, VPN,
-    get_kernel_satp, load_elf, push_trap_area,
-};
+use crate::mm::prelude::VMSpace;
+use crate::sbi::shutdown;
 use crate::sync::spin::SpinLock;
-use crate::task::{
-    control::{TaskControlBlock, TaskState, TaskStatistics},
-    loader::get_app_elf_bytes,
-};
+use crate::timer;
 use crate::trap::{self, TrapContext};
-use crate::{debug, log};
+use crate::{debug, info, log};
 
-const TASK_MAX_NUMBER: usize = 8;
-const KERNEL_STACK_SIZE: usize = 0x2000; // 8KB
-const USER_STACK_SIZE: usize = 0x2000; // 8KB
+use crate::task::apps::{get_app_elf, get_total_apps};
+use crate::task::state::{TaskContext, TaskControlBlock, TaskState, TaskStatistics};
 
-#[unsafe(link_section = ".bss.task_kernel_stacks")]
-static mut TASK_KERNEL_STACK: [KernelStack; TASK_MAX_NUMBER] =
-    [KernelStack([0u8; KERNEL_STACK_SIZE]); TASK_MAX_NUMBER];
+// The design should be revisited if the environment
+// is not single-threaded, not single-core, or allows
+// interrupts when the kernel is running.
+static ALL_TASKS: SpinLock<Vec<TaskControlBlock>> = SpinLock::new(Vec::new());
 
-#[unsafe(link_section = ".bss.task_user_stacks")]
-static mut TASK_USER_STACK: [UserStack; TASK_MAX_NUMBER] =
-    [UserStack([0u8; USER_STACK_SIZE]); TASK_MAX_NUMBER];
-
-lazy_static! {
-    // An extra slot to store the switched-out context when running the first task
-    static ref TASK_CONTROL_BLOCK: [SpinLock<TaskControlBlock>; TASK_MAX_NUMBER + 1] =
-        array::from_fn(|_| { SpinLock::new(TaskControlBlock::new_placeholder()) });
-}
-
-#[derive(Clone, Copy)]
-#[repr(align(4096))]
-struct KernelStack([u8; KERNEL_STACK_SIZE]);
-
-impl KernelStack {
-    fn get_upper_bound(task_index: usize) -> usize {
-        unsafe {
-            let ptr = &raw const TASK_KERNEL_STACK[task_index].0 as *const u8;
-            ptr.add(KERNEL_STACK_SIZE) as usize
-        }
-    }
-
-    fn get_lower_bound(task_index: usize) -> usize {
-        unsafe { (&raw const TASK_KERNEL_STACK[task_index].0).addr() }
-    }
-}
-
-#[derive(Clone, Copy)]
-#[repr(align(4096))]
-struct UserStack([u8; USER_STACK_SIZE]);
-
-impl UserStack {
-    fn get_upper_bound(task_index: usize) -> usize {
-        unsafe {
-            let ptr = &raw const TASK_USER_STACK[task_index].0 as *const u8;
-            ptr.add(USER_STACK_SIZE) as usize
-        }
-    }
-
-    fn get_lower_bound(task_index: usize) -> usize {
-        unsafe { (&raw const TASK_USER_STACK[task_index].0).addr() }
-    }
+global_asm!(include_str!("task/switch.S"));
+unsafe extern "C" {
+    unsafe fn __switch(curr_context: *mut TaskContext, next_context: *const TaskContext);
 }
 
 pub(super) fn start() -> ! {
-    init_all_tasks();
-    debug_print_tcb();
-    runner::init_and_run()
+    for i in 0..get_total_apps() {
+        add_task(get_app_elf(i));
+    }
+    run_next_task();
+    unreachable!()
 }
 
-fn get_total_tasks() -> usize {
-    min(TASK_MAX_NUMBER, loader::get_total_apps())
+fn add_task(elf_bytes: &[u8]) {
+    // Create task vm space and tcb
+    let vm_space = VMSpace::new_user(elf_bytes).expect("Failed to create user vm space");
+    let satp = vm_space.get_satp();
+    let entry = vm_space.get_entry_addr();
+    let user_sp = vm_space.get_user_stack_end();
+    let kernel_sp = vm_space.get_kernel_stack_end() - size_of::<TrapContext>();
+
+    let tcb = TaskControlBlock::new_ready(
+        vm_space,
+        trap::__restore as usize,
+        kernel_sp,
+        kernel_sp,
+        satp,
+    );
+
+    // Push initial trap context to kernel stack
+    let trap_context = TrapContext::new_initial(entry, user_sp, tcb.get_task_id());
+    unsafe { (kernel_sp as *mut TrapContext).write_volatile(trap_context) };
+
+    // Push tcb to the task list
+    ALL_TASKS.lock().push(tcb);
 }
 
-pub(crate) fn get_task_name<'a>(task_index: usize) -> &'a str {
-    loader::get_app_name(task_index)
-}
+/// Searches for and runs a ready task, or shuts down
+/// if no task is found.
+pub(crate) fn run_next_task() {
+    let mut all_tasks = ALL_TASKS.lock();
 
-fn init_all_tasks() {
-    for task_index in 0..get_total_tasks() {
-        init_task(task_index);
+    let mut curr_context = null_mut();
+    if let Some(task_id) = get_current_task_id()
+        && let Some(mut tcb) = take_task_tcb(&mut all_tasks, task_id)
+    {
+        curr_context = tcb.get_context_mut() as *mut TaskContext;
+        let state = tcb.get_state();
+        if state == TaskState::Ready {
+            all_tasks.push(tcb);
+        } else if state == TaskState::Running {
+            panic!("Attempt to switch task {task_id} but its state is running")
+        }
+    }
+
+    if let Some(task_id) = get_next_task_id(&all_tasks) {
+        let mut tcb = take_task_tcb(&mut all_tasks, task_id).unwrap();
+        let next_context = tcb.get_context() as *const TaskContext;
+
+        let time = timer::read_time_ms();
+        debug!(
+            "Task {} starts at {}.{:03} seconds since system start",
+            task_id,
+            time / 1000,
+            time % 1000,
+        );
+        tcb.set_state(TaskState::Running);
+        tcb.record_run_start();
+        all_tasks.push(tcb);
+
+        // The design should be revisited if the environment
+        // is not single-threaded, not single-core, or allows
+        // interrupts when the kernel is running.
+        drop(all_tasks);
+
+        timer::set_next_timer_interrupt();
+        unsafe { __switch(curr_context, next_context) };
+    } else {
+        info!("No more tasks to run, bye bye.");
+        shutdown(false)
     }
 }
 
-fn init_task(task_index: usize) {
-    set_first_run_tcb(task_index);
-
-    let kernel_satp = get_kernel_satp();
-    let user_satp = TASK_CONTROL_BLOCK[task_index].lock().get_user_satp();
-    push_first_run_trap_context(task_index, kernel_satp, user_satp);
+fn get_next_task_id(tasks: &Vec<TaskControlBlock>) -> Option<usize> {
+    tasks
+        .iter()
+        .position(|tcb| tcb.get_state() == TaskState::Ready)
+        .map(|i| tasks[i].get_task_id())
 }
 
-/// `push_first_run_trap_context` pushes the first run trap context onto the task's
-/// kernel stack.
-fn push_first_run_trap_context(task_index: usize, kernel_satp: usize, user_satp: usize) {
-    let init_context = TrapContext::new_init_context(
-        get_task_entry_addr(task_index),
-        UserStack::get_upper_bound(task_index),
-        kernel_satp,
-        user_satp,
-    );
+/// Returns the task ID of the current task based
+/// on the current thread pointer, i.e., tp.
+pub(crate) fn get_current_task_id() -> Option<usize> {
+    let mut tp: usize;
+    unsafe { asm!("mv {}, tp", out(reg) tp) };
 
-    let mut kernel_sp = KernelStack::get_upper_bound(task_index) as *mut TrapContext;
-    assert!(
-        kernel_sp.is_aligned(),
-        "Actions required to align the kernel_sp with TrapContext"
-    );
-    unsafe {
-        kernel_sp = kernel_sp.offset(-1);
-        kernel_sp.write_volatile(init_context);
-    };
-}
-
-fn get_task_entry_addr(task_index: usize) -> usize {
-    loader::get_app_entry_ptr(task_index).addr()
-}
-
-/// `set_first_run_tcb` configures the [TaskControlBlock] of the
-/// task for its first run.
-///
-/// [TaskControlBlock]: super::control::TaskControlBlock
-fn set_first_run_tcb(task_index: usize) {
-    let mut tcb = TASK_CONTROL_BLOCK[task_index].lock();
-    // Configure state
-    tcb.change_state(TaskState::Ready);
-
-    // Configure context
-    let init_kernel_sp = KernelStack::get_upper_bound(task_index) - size_of::<TrapContext>();
-    let context = tcb.get_mut_context();
-    context.set_ra(trap::__restore as usize);
-    context.set_sp(init_kernel_sp);
-
-    // Configure vm_space
-    let vm_space = tcb.get_mut_vm_space();
-    load_task_elf(vm_space, task_index).expect("Failed to load user elf");
-    push_task_stack_areas(vm_space, task_index).expect("Failed to push task stack areas");
-    push_trap_area(vm_space).expect("Failed to push trap area");
-}
-
-fn load_task_elf(space: &mut VMSpace, task_index: usize) -> Result<bool, VMError> {
-    load_elf(
-        space,
-        get_task_elf_bytes(task_index),
-        true,
-        MapType::Identical,
-    )
-}
-
-fn get_task_elf_bytes<'a>(task_index: usize) -> &'a [u8] {
-    get_app_elf_bytes(task_index)
-}
-
-fn push_task_stack_areas(space: &mut VMSpace, task_index: usize) -> Result<bool, VMError> {
-    let user_stack_area = VMArea::new(
-        VPN::from_addr(UserStack::get_lower_bound(task_index)),
-        VPN::from_addr(UserStack::get_upper_bound(task_index)),
-        MapType::Identical,
-        PERMISSION_R | PERMISSION_W | PERMISSION_U,
-    );
-    space.push_area(user_stack_area, true)?;
-
-    let kernel_stack_area = VMArea::new(
-        VPN::from_addr(KernelStack::get_lower_bound(task_index)),
-        VPN::from_addr(KernelStack::get_upper_bound(task_index)),
-        MapType::Identical,
-        PERMISSION_R | PERMISSION_W,
-    );
-    space.push_area(kernel_stack_area, true)?;
-
-    Ok(true)
-}
-
-fn debug_print_tcb() {
-    for i in 0..TASK_MAX_NUMBER {
-        let tcb = TASK_CONTROL_BLOCK[i].lock();
-        debug!("TCB {}: {:#?}", i, tcb);
+    if tp == 0 {
+        return None;
     }
+    let task_id = unsafe { (tp as *const TrapContext).as_ref() }
+        .unwrap()
+        .get_task_id();
+    Some(task_id)
 }
 
-/// `exchange_recent_task_state` changes the state of the most recent task to
-/// `new` if the current state is the same as `expected`.
+/// Takes the [TaskControlBlock] with `task_id` from
+/// `tasks`, or returns [None] if no matching task is
+/// found.
+fn take_task_tcb(tasks: &mut Vec<TaskControlBlock>, task_id: usize) -> Option<TaskControlBlock> {
+    let index = tasks.iter().position(|tcb| tcb.get_task_id() == task_id)?;
+    let rand_index = timer::read_time() % tasks.len();
+    tasks.swap(index, rand_index);
+    Some(tasks.swap_remove(rand_index))
+}
+
+/// Changes the state of the current task to `new` if
+/// the current state is the same as `expected`.
 ///
-/// The return value is a [Result] indicating whether the change succeeded and
-/// contains the previous state.
-pub(crate) fn exchange_recent_task_state(
+/// The return value is a [Result] indicating whether
+/// the change succeeded and contains the previous state.
+///
+/// This function panics if the thread is not running
+/// a task.
+pub(crate) fn exchange_current_task_state(
     expected: TaskState,
     new: TaskState,
 ) -> Result<TaskState, TaskState> {
-    let mut tcb = TASK_CONTROL_BLOCK[runner::get_recent_task_index()].lock();
+    let task_id = get_current_task_id().expect("No current task running in this thread.");
+
+    let mut all_tasks = ALL_TASKS.lock();
+    let tcb = all_tasks
+        .iter_mut()
+        .find(|tcb| tcb.get_task_id() == task_id)
+        .unwrap();
     let state = tcb.get_state();
 
     if state == expected {
-        tcb.change_state(new);
+        tcb.set_state(new);
         Ok(expected)
     } else {
         Err(state)
     }
 }
 
-/// `record_syscall_for_recent_task` records a call to the syscall for the
-/// recent task, which may fail since only the first [MAX_SYSCALLS_TRACKED]
-/// different syscalls are tracked. It returns a boolean indicating whether
-/// the call has been recorded.
+/// Records the current mtime as the current task's
+/// last run end time, and updates the total executed
+/// time and the switch count.
 ///
-/// [MAX_SYSCALLS_TRACKED]: control::MAX_SYSCALLS_TRACKED
-pub(crate) fn record_syscall_for_recent_task(syscall_id: usize) -> bool {
-    TASK_CONTROL_BLOCK[runner::get_recent_task_index()]
-        .lock()
-        .record_syscall(syscall_id)
+/// This function panics if the thread is not running
+/// a task.
+pub(crate) fn record_current_run_end() {
+    let task_id = get_current_task_id().expect("No current task running in this thread.");
+
+    let mut all_tasks = ALL_TASKS.lock();
+    let tcb = all_tasks
+        .iter_mut()
+        .find(|tcb| tcb.get_task_id() == task_id)
+        .unwrap();
+    tcb.record_run_end();
 }
 
-pub(crate) fn get_task_info(task_index: usize) -> TaskInfo {
-    let task_index = min(task_index, TASK_MAX_NUMBER);
-    let tcb = TASK_CONTROL_BLOCK[task_index].lock();
-    TaskInfo {
-        task_id: task_index,
+/// Records a call to the syscall for the recent task,
+/// which may fail since only the first [MAX_SYSCALLS_TRACKED]
+/// different syscalls are tracked. It returns a boolean
+/// indicating whether the call has been recorded.
+///
+/// This function panics if the thread is not running
+/// a task.
+///
+/// [MAX_SYSCALLS_TRACKED]: control::MAX_SYSCALLS_TRACKED
+pub(crate) fn record_current_syscall(syscall_id: usize) -> bool {
+    let task_id = get_current_task_id().expect("No current task running in this thread.");
+
+    let mut all_tasks = ALL_TASKS.lock();
+    let tcb = all_tasks
+        .iter_mut()
+        .find(|tcb| tcb.get_task_id() == task_id)
+        .unwrap();
+    tcb.record_syscall(syscall_id)
+}
+
+/// Returns the [TaskInfo] of the task with `task_id`,
+/// or [None] if no matching task is found
+pub(crate) fn get_task_info(task_id: usize) -> Option<TaskInfo> {
+    let all_tasks = ALL_TASKS.lock();
+    let tcb = all_tasks.iter().find(|tcb| tcb.get_task_id() == task_id)?;
+
+    Some(TaskInfo {
+        task_id,
         state: tcb.get_state(),
         stastics: tcb.get_statistics(),
-    }
+    })
 }
 
 #[allow(dead_code)]

@@ -1,62 +1,64 @@
 .altmacro
 
-.macro SAVE_GP n
-    sd x\n, \n*8(sp)
+.macro save_gp n
+    sd x\n, \n*8(tp)
 .endm
 
-.macro RESTORE_GP n
-    ld x\n, \n*8(sp)
+.macro restore_gp n
+    ld x\n, \n*8(tp)
 .endm
 
-    .section .text.trap
     .global __stvec
     .global __restore
-    .align 2                  # The lowest two bits are always zero and are overridden by mode
-    # Invariant:
-    # The sscratch contains the kernel_sp when entering the trap.
+    .align 2                   # The lowest two bits are always zero and are overridden by mode
 __stvec:
-    csrrw sp, sscratch, sp    # Swap the value of sp and sscratch
-    addi sp, sp, -34*8        # Make room for the TrapContext in the kernel stack
-    SAVE_GP 1                 # x2, i.e. sp, will be saved later
-    SAVE_GP 3                 # x4, i.e. tp, is skipped because it is not used by applications
-    .set n, 5                 # Saved x5 through x31
-    .rept 27
-        SAVE_GP %n
+    csrrw tp, sscratch, tp
+
+    /* If tp == 0, we are in kernel space and do not need to
+    * store the context. Otherwise, tp holds the address of
+    * the trap context, where we save our context, and it is also
+    * the current kernel sp.
+    */
+    beqz tp, DONE_SAVE
+
+SAVE_CONTEXT:
+    .set n, 0
+    .rept 32
+        save_gp %n
         .set n, n+1
-    .endr                     # We can use the x5 through x7 since they have been saved
-    csrr x5, sstatus          # Save the sstatus, sepc and user_sp
-    csrr x6, sepc
-    csrr x7, sscratch
-    sd x5, 32*8(sp)
-    sd x6, 33*8(sp)
-    sd x7, 2*8(sp)
+    .endr
+    csrrw x5, sscratch, x0
+    sd x5, 4*8(tp)
+    csrr x5, sstatus
+    sd x5, 32*8(tp)
+    csrr x5, sepc
+    sd x5, 33*8(tp)
+    mv sp, tp
+DONE_SAVE:
 
-    mv x10, sp                # Set the arugment for trap_handler, i.e., a pointer to the saved context
-
-    ld x5, 34*8(sp)           # Switch to kernel satp
-    csrw satp, x5
-    sfence.vma
-
+    mv a0, tp                  # Set the arugment for trap_handler, i.e., a pointer to the saved context
     call trap_handler
 
 __restore:
-    ld x5, 35*8(sp)           # Switch to user satp
-    csrw satp, x5
-    sfence.vma
+    bnez tp, RESTORE_CONTEXT   # Same logic as the save_context
+    csrrw tp, sscratch, tp
+    sret
 
-    ld x5, 32*8(sp)           # Restore the sstatus, sepc and sscratch
-    ld x6, 33*8(sp)
-    ld x7, 2*8(sp)
+RESTORE_CONTEXT:
+    csrw sscratch, tp
+    ld x5, 32*8(tp)
     csrw sstatus, x5
-    csrw sepc, x6
-    csrw sscratch, x7
-    RESTORE_GP 1              # Restore the saved registers
-    RESTORE_GP 3
+    ld x5, 33*8(tp)
+    csrw sepc, x5
     .set n, 5
     .rept 27
-        RESTORE_GP %n
+        restore_gp %n
         .set n, n+1
     .endr
-    addi sp, sp, 34*8         # Pop the room for the TrapContext from the kernel stak
-    csrrw sp, sscratch, sp    # Swap the value of sp and sscratch
+    restore_gp 1
+    restore_gp 2
+    restore_gp 3
+    restore_gp 4
+DONE_RESTORE:
+
     sret

@@ -1,5 +1,7 @@
 use core::arch::asm;
 
+use riscv::regs::sstatus;
+
 use crate::{println, sbi::shutdown};
 
 #[panic_handler]
@@ -23,6 +25,7 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
 /// # Safety
 /// This function relies on the saved frame pointers to work correctly.
 unsafe fn print_stack_trace() {
+    sstatus::set_sum_permit();
     println!("#------- Stack Trace (most recent first) -------#");
     let mut fp: *const usize;
 
@@ -33,4 +36,5 @@ unsafe fn print_stack_trace() {
         println!("| fp {:#018x}, ra {:#018x}  |", fp as usize, ra);
     }
     println!("#-----------------------------------------------#");
+    sstatus::set_sum_deny();
 }

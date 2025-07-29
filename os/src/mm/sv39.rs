@@ -1,71 +1,34 @@
 extern crate alloc;
-use core::slice;
+
+use core::mem::ManuallyDrop;
 
 use alloc::vec::Vec;
 use riscv::regs::satp::{self, Mode};
 
-use crate::mm::page_alloc::{self, Page};
+use crate::mm::page_alloc::{Page, alloc_page, alloc_zeroed_page};
+use crate::mm::{PAGE_SIZE_ORDER, PPN, VPN, get_pa_mut_ptr};
 
-// Sv39 physical address is limited to 56 bits.
-const MAX_PHYS_ADDR: usize = (1 << 56) - 1;
-const PAGE_OFFSET_ORDER: usize = 12;
 const PTES_PER_TABLE: usize = 512;
 
-fn acquire_zeroed_page() -> Result<Page, PgtError> {
-    page_alloc::alloc_zeroed_page().ok_or(PgtError::AcquirePageFailed)
-}
-
-/// Obtains a pointer to the physical address `pa`. The current
-/// implementation assumes an identical mapping.
-fn get_pa_mut_ptr(pa: usize) -> *mut u8 {
-    pa as *mut u8
-}
-
-/// Returns whether the physical address complies with the Sv39 scheme.
-fn is_valid_pa(pa: usize) -> bool {
-    pa <= MAX_PHYS_ADDR
-}
-
-/// Returns whether the virtual address complies with the Sv39 scheme.
-fn is_valid_va(va: usize) -> bool {
-    // va must have bits 63-39 all equal to bit 38 (0-indexed) according
-    // to the Sv39 scheme.
-    let mask = 0xffff_ffc0_0000_0000;
-    va & mask == 0 || va & mask == mask
-}
-
-/// Returns an array of VPN_0, VPN_1, VPN_2 and page_offset according
-/// to the Sv39 scheme, or a [PgtError] if the `va` is invalid.
-fn parse_virtual_addr(va: usize) -> Result<[usize; 4], PgtError> {
-    if !is_valid_va(va) {
-        return Err(PgtError::InvalidVirtualAddress);
-    }
-
-    let vpn_2 = (va >> 30) & 0x1ff;
-    let vpn_1 = (va >> 21) & 0x1ff;
+/// Returns an array consisting of VPN_0, VPN_1, and VPN_2.
+fn parse_vpn(vpn: VPN) -> [usize; 3] {
+    let va = vpn.get_va();
     let vpn_0 = (va >> 12) & 0x1ff;
-    let page_offset = va & 0xfff;
+    let vpn_1 = (va >> 21) & 0x1ff;
+    let vpn_2 = (va >> 30) & 0x1ff;
 
-    Ok([vpn_0, vpn_1, vpn_2, page_offset])
+    [vpn_0, vpn_1, vpn_2]
 }
 
-/// Abstraction of the root page table for the Page-Based 39-bit
-/// virtual memory system.
-///
-/// # Invariants:
-///
-/// * Instances of [RootPgt] should only be created through the
-/// [RootPgt::new] method.
-///
-/// * Any valid non-leaf [PTE] in a page table must point to a
-/// physical page holding the [PTE]s of a page table.
+/// Abstraction of the root page table for the Page-Based
+/// 39-bit virtual memory system.
 #[derive(Debug)]
 pub(super) struct RootPgt {
-    /// The physical page number (in Sv39) of the physical page
-    /// backing the [PTE]s of the [RootPgt].
-    ppn: usize,
-    /// The physical pages backing the [PTE]s of the [RootPgt]
-    /// and its child tables.
+    /// The physical page number (in Sv39) of the physical
+    /// page backing this [RootPgt].
+    ppn: PPN,
+    /// The physical pages backing this [RootPgt] and its
+    /// child tables.
     pages: Vec<Page>,
 }
 
@@ -73,79 +36,107 @@ impl RootPgt {
     /// Creates a new [RootPgt] or returns the corresponding
     /// [PgtError].
     pub(super) fn new() -> Result<Self, PgtError> {
-        let page = acquire_zeroed_page()?;
+        let page = alloc_zeroed_page().ok_or(PgtError::AcquirePageFailed)?;
+        let ppn = page.get_ppn();
+        let pages = alloc::vec![page];
 
-        let pa = page.get_physical_addr();
-        if !is_valid_pa(pa) {
-            return Err(PgtError::InvalidPhysicalAddress);
+        Ok(Self { ppn, pages })
+    }
+
+    /// Create a new [RootPgt] initialized with the given
+    /// `entries`.
+    ///
+    /// # Safety
+    ///
+    /// `entries` should be a valid page table.
+    pub(super) unsafe fn new_copy(entries: &[PTE; PTES_PER_TABLE]) -> Result<Self, PgtError> {
+        let page = alloc_page().ok_or(PgtError::AcquirePageFailed)?;
+        let ppn = page.get_ppn();
+        let pages = alloc::vec![page];
+
+        unsafe {
+            (get_pa_mut_ptr(ppn.get_pa()) as *mut [PTE; PTES_PER_TABLE])
+                .as_mut()
+                .unwrap()
+                .copy_from_slice(entries);
         }
 
-        Ok(Self {
-            ppn: pa >> PAGE_OFFSET_ORDER,
-            pages: alloc::vec![page],
-        })
+        Ok(Self { ppn, pages })
     }
 
     pub(super) fn get_satp(&self) -> usize {
-        satp::compute_value(self.ppn, Mode::Sv39)
+        satp::compute_value(self.ppn.get_raw(), Mode::Sv39)
     }
 
-    /// Returns a slice over the physical page corresponding to the
-    /// `ppn` in Sv39.
+    /// Returns a [PTE] array view of the physical page
+    /// corresponding to the `ppn`.
     ///
-    /// # Safety:
-    /// * The physical page corresponding to the `ppn` should indeed
-    /// hold the [PTE]s of a page table.
-    unsafe fn as_mut_slice_from_ppn<'a>(ppn: usize) -> &'a mut [PTE] {
-        let pa = get_pa_mut_ptr(ppn << PAGE_OFFSET_ORDER);
-        unsafe { slice::from_raw_parts_mut(pa as *mut PTE, PTES_PER_TABLE) }
+    /// # Safety
+    ///
+    /// - The physical page corresponding to the `ppn`
+    /// should be a valid page table.
+    ///
+    /// - The page table should remain valid after modifications,
+    /// if any.
+    pub(super) unsafe fn get_ptes_mut<'a>(ppn: PPN) -> &'a mut [PTE; PTES_PER_TABLE] {
+        let ptr = get_pa_mut_ptr(ppn.get_pa()) as *mut [PTE; PTES_PER_TABLE];
+        unsafe { ptr.as_mut().unwrap() }
     }
 
-    /// Maps the virtual page containing the `va` to the physical page
-    /// containing the `pa`, and constructs any necessary intermediate
-    /// page tables.
+    /// Consumes the [RootPgt] but prevents the backing
+    /// pages from being recycled. This method is only for
+    /// the kernel [RootPgt].
+    pub(super) unsafe fn forget_self(self) {
+        self.pages.into_iter().for_each(|page| {
+            let _ = ManuallyDrop::new(page);
+        })
+    }
+
+    /// Maps `vpn` to `ppn` and constructs any necessary
+    /// intermediate page tables.
     ///
-    /// If an error occurrs, it returns the corresponding [PgtError].
-    /// However, the newly created [PTE]s and acquired [Page]s are not
-    /// rolled back.
+    /// If an error occurs, it returns the corresponding
+    /// [PgtError]. However, the newly created [PTE]s and
+    /// acquired [Page]s are not rolled back.
     pub(super) fn map_create(
         &mut self,
-        va: usize,
-        pa: usize,
+        vpn: VPN,
+        ppn: PPN,
         pte_flags: usize,
-    ) -> Result<bool, PgtError> {
-        let va = parse_virtual_addr(va)?;
-        let leaf_pte = PTE::new(pa, pte_flags)?;
+    ) -> Result<(), PgtError> {
+        let parsed_vpn = parse_vpn(vpn);
+        let leaf_pte = PTE::new(ppn, pte_flags)?;
         // SAFETY:
-        // The RootPgt instance itself must point to a physical page holding
-        // the corresponding page table.
-        let mut table = unsafe { Self::as_mut_slice_from_ppn(self.ppn) };
+        // The RootPgt instance itself must point to a physical
+        // page holding the corresponding page table.
+        let mut table = unsafe { Self::get_ptes_mut(self.ppn) };
 
         // Walk to the leaf table
         for level in [2, 1] {
-            if !table[va[level]].is_valid() {
-                let page = acquire_zeroed_page()?;
-                table[va[level]] = PTE::new(page.get_physical_addr(), PTE::FLAG_V)?;
+            if !table[parsed_vpn[level]].is_valid() {
+                let page = alloc_zeroed_page().ok_or(PgtError::AcquirePageFailed)?;
+                table[parsed_vpn[level]] = PTE::new(page.get_ppn(), PTE::FLAG_V)?;
                 self.pages.push(page);
             }
 
-            if table[va[level]].is_leaf() {
-                return Err(PgtError::HugePageNotSupported);
+            if table[parsed_vpn[level]].is_leaf() {
+                return Err(PgtError::DoubleMapping(vpn, ppn));
             }
 
             // SAFETY:
-            // The page table entry must be valid and point to a physical page
-            // holding a page table; therefore, we can cast a slice over it.
-            table = unsafe { RootPgt::as_mut_slice_from_ppn(table[va[level]].get_ppn()) };
+            // The page table entry must be valid and point to a
+            // physical page holding a page table; therefore, we
+            // can cast a slice over it.
+            table = unsafe { RootPgt::get_ptes_mut(table[parsed_vpn[level]].get_ppn()) };
         }
 
         // Update the leaf table
-        if table[va[0]].is_valid() {
-            return Err(PgtError::DoubleMapping);
+        if table[parsed_vpn[0]].is_valid() {
+            return Err(PgtError::DoubleMapping(vpn, ppn));
         }
-        table[va[0]] = leaf_pte;
+        table[parsed_vpn[0]] = leaf_pte;
 
-        Ok(true)
+        Ok(())
     }
 }
 
@@ -155,8 +146,8 @@ impl RootPgt {
 pub(super) struct PTE(usize);
 
 impl PTE {
-    // The N and PBMT flags are excluded since Svnapot extension is
-    // not implemented.
+    // The N and PBMT flags are excluded since Svnapot
+    // extension is not implemented.
     const ALL_FLAGS: usize = 0x3ff;
     pub(super) const FLAG_V: usize = 1 << 0;
     pub(super) const FLAG_R: usize = 1 << 1;
@@ -164,28 +155,23 @@ impl PTE {
     pub(super) const FLAG_X: usize = 1 << 3;
     pub(super) const FLAG_U: usize = 1 << 4;
 
-    /// Creates a [PTE] that points to the physical page containing
-    /// the `pa`, or returns the corresponding [PgtError].
+    /// Creates a [PTE] that points to the physical page
+    /// containing the `pa`, or returns the corresponding
+    /// [PgtError].
     ///
     /// Svnapot extension is not implemented.
-    fn new(pa: usize, pte_flags: usize) -> Result<Self, PgtError> {
-        if !is_valid_pa(pa) {
-            return Err(PgtError::InvalidPhysicalAddress);
-        }
-
+    fn new(ppn: PPN, pte_flags: usize) -> Result<Self, PgtError> {
         if !Self::is_valid_flags(pte_flags) {
-            return Err(PgtError::InvalidPteFlags);
+            return Err(PgtError::InvalidPteFlags(pte_flags));
         }
-
-        let ppn = pa >> PAGE_OFFSET_ORDER;
-        let value = (ppn << 10) | pte_flags;
+        let value = (ppn.get_raw() << 10) | pte_flags;
         Ok(Self(value))
     }
 
     fn is_valid_flags(pte_flags: usize) -> bool {
         if Self::has_unknown_flags_set(pte_flags)
             || Self::has_v_flag_clear(pte_flags)
-            || Self::is_reserved_xwr_flag_encodings(pte_flags)
+            || Self::is_reserved_xwr_encodings(pte_flags)
         {
             return false;
         }
@@ -201,7 +187,7 @@ impl PTE {
         pte_flags & Self::FLAG_V == 0
     }
 
-    fn is_reserved_xwr_flag_encodings(pte_flags: usize) -> bool {
+    fn is_reserved_xwr_encodings(pte_flags: usize) -> bool {
         let xwr = (pte_flags & (Self::FLAG_X | Self::FLAG_W | Self::FLAG_R)) >> 1;
         xwr == 0b010 || xwr == 0b110
     }
@@ -210,8 +196,9 @@ impl PTE {
         self.0 & Self::FLAG_V != 0
     }
 
-    fn get_ppn(&self) -> usize {
-        (self.0 >> 10) & 0xfff_ffff_ffff
+    fn get_ppn(&self) -> PPN {
+        let ppn = (self.0 >> 10) & 0xfff_ffff_ffff;
+        PPN::from_pa(ppn << PAGE_SIZE_ORDER)
     }
 
     fn is_leaf(&self) -> bool {
@@ -221,10 +208,10 @@ impl PTE {
 
 #[derive(Debug)]
 pub(crate) enum PgtError {
-    InvalidVirtualAddress,
-    InvalidPhysicalAddress,
-    InvalidPteFlags,
     AcquirePageFailed,
-    HugePageNotSupported,
-    DoubleMapping,
+    #[allow(dead_code)]
+    InvalidPteFlags(usize),
+    #[allow(dead_code)]
+    /// Attempts to map a [VPN] that is already mapped.
+    DoubleMapping(VPN, PPN),
 }
