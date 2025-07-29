@@ -61,7 +61,7 @@ pub(super) fn init_kernel_satp() -> Result<(), VMError> {
     // We don't keep an instance of RootPgt for kernel space.
     // Here, we use its forget method to prevent the backing
     // pages from being recycled.
-    unsafe { root_pgt.forget_self() };
+    let _ = unsafe { root_pgt.forget_self() };
 
     Ok(())
 }

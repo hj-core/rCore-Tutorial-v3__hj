@@ -84,12 +84,17 @@ impl RootPgt {
     }
 
     /// Consumes the [RootPgt] but prevents the backing
-    /// pages from being recycled. This method is only for
-    /// the kernel [RootPgt].
-    pub(super) unsafe fn forget_self(self) {
+    /// pages from being recycled. Returns the number of
+    /// pages forgotten.
+    ///
+    /// This method is only for the kernel [RootPgt].
+    pub(super) unsafe fn forget_self(self) -> usize {
+        let result = self.pages.len();
         self.pages.into_iter().for_each(|page| {
             let _ = ManuallyDrop::new(page);
-        })
+        });
+
+        result
     }
 
     /// Maps `vpn` to `ppn` and constructs any necessary
