@@ -53,6 +53,19 @@ fn trap_handler(context: &mut TrapContext) -> &mut TrapContext {
     let stval_val = stval::read();
 
     match cause {
+        Cause::SupervisorTimerInterrupt => {
+            if let Some(task_id) = get_current_task_id() {
+                exchange_current_task_state(TaskState::Running, TaskState::Ready)
+                    .expect("Expected the current TaskState to be Running");
+                record_current_run_end();
+
+                info!("Task {:?}: {:?}.", task_id, cause);
+                run_next_task();
+            } else {
+                panic!("Kernel received a {cause:?}");
+            }
+        }
+
         Cause::UserEnvironmentCall => {
             let syscall_id = context.x[17];
             record_current_syscall(syscall_id);
@@ -83,19 +96,6 @@ fn trap_handler(context: &mut TrapContext) -> &mut TrapContext {
                 record_current_run_end();
 
                 warn!("Task {:?}: {:?}, kernel killed it.", task_id, cause);
-                run_next_task();
-            } else {
-                panic!("Kernel received a {cause:?}");
-            }
-        }
-
-        Cause::SupervisorTimerInterrupt => {
-            if let Some(task_id) = get_current_task_id() {
-                exchange_current_task_state(TaskState::Running, TaskState::Ready)
-                    .expect("Expected the current TaskState to be Running");
-                record_current_run_end();
-
-                info!("Task {:?}: {:?}.", task_id, cause);
                 run_next_task();
             } else {
                 panic!("Kernel received a {cause:?}");
