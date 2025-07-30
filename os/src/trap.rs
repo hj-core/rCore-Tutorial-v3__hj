@@ -63,7 +63,7 @@ fn trap_handler(context: &mut TrapContext) -> &mut TrapContext {
                     as usize;
         }
 
-        Cause::StoreOrAmoAccessFault | Cause::StoreOrAmoPageFault => {
+        Cause::StoreOrAmoPageFault => {
             if let Some(task_id) = get_current_task_id() {
                 exchange_current_task_state(TaskState::Running, TaskState::Killed)
                     .expect("Expected the current TaskState to be Running");
