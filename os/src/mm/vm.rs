@@ -9,10 +9,10 @@ use xmas_elf::{ElfFile, program};
 use crate::mm::page_alloc::{Page, alloc_page, alloc_zeroed_page};
 use crate::mm::sv39::{PTE, PgtError, RootPgt};
 use crate::mm::{
-    KERNEL_VA_OFFSET, MEM_SIZE_BYTES, MEM_START_PA, PAGE_SIZE_BYTES, PAGE_SIZE_ORDER, PPN,
-    QEMU_VIRT_MMIO, USER_SPACE_END, VPN, bss_end, bss_start, data_end, data_start, get_pa_from_va,
-    get_pa_mut_ptr, get_va_from_pa, kernel_end, kernel_stack_end, kernel_stack_start, rodata_end,
-    rodata_start, text_end, text_start,
+    KERNEL_VA_OFFSET, LARGE_PAGE_SIZE_BYTES, MEM_SIZE_BYTES, MEM_START_PA, PAGE_SIZE_BYTES,
+    PAGE_SIZE_ORDER, PPN, QEMU_VIRT_MMIO, USER_SPACE_END, VPN, bss_end, bss_start, data_end,
+    data_start, get_pa_from_va, get_pa_mut_ptr, get_va_from_pa, kernel_end, kernel_stack_end,
+    kernel_stack_start, rodata_end, rodata_start, text_end, text_start,
 };
 
 const ALL_PERMISSION_FLAGS: usize = PERMISSION_R | PERMISSION_W | PERMISSION_X | PERMISSION_U;
@@ -139,14 +139,75 @@ fn map_kernel_bss(root_pgt: &mut RootPgt) -> Result<(), VMError> {
 }
 
 fn map_phys_mem(root_pgt: &mut RootPgt) -> Result<(), VMError> {
-    let start_va = if kernel_end as usize & (PAGE_SIZE_BYTES - 1) == 0 {
-        kernel_end as usize
-    } else {
-        kernel_end as usize + PAGE_SIZE_BYTES
-    };
+    let permissions = PERMISSION_R | PERMISSION_W;
+    let start_va = compute_phy_mem_page_start(kernel_end as usize);
     let end_va = get_va_from_pa(MEM_START_PA + MEM_SIZE_BYTES);
+    let large_start_va = compute_phy_mem_large_page_start(start_va);
+    let large_end_va = compute_phy_mem_large_page_end(end_va);
 
-    map_kernel_range(root_pgt, start_va, end_va, PERMISSION_R | PERMISSION_W)
+    if large_end_va <= large_start_va {
+        map_kernel_range(root_pgt, start_va, end_va, permissions)
+    } else {
+        map_kernel_range(root_pgt, start_va, large_start_va, permissions)?;
+        map_kernel_range_large(root_pgt, large_start_va, large_end_va, permissions)?;
+        map_kernel_range(root_pgt, large_end_va, end_va, permissions)
+    }
+}
+
+fn compute_phy_mem_page_start(kernel_end: usize) -> usize {
+    if kernel_end & (PAGE_SIZE_BYTES - 1) == 0 {
+        kernel_end
+    } else {
+        kernel_end - (kernel_end & (PAGE_SIZE_BYTES - 1)) + PAGE_SIZE_BYTES
+    }
+}
+
+fn compute_phy_mem_large_page_start(kernel_end: usize) -> usize {
+    if kernel_end & (LARGE_PAGE_SIZE_BYTES - 1) == 0 {
+        kernel_end
+    } else {
+        kernel_end - (kernel_end & (LARGE_PAGE_SIZE_BYTES - 1)) + LARGE_PAGE_SIZE_BYTES
+    }
+}
+
+fn compute_phy_mem_large_page_end(phy_mem_end: usize) -> usize {
+    if phy_mem_end & (LARGE_PAGE_SIZE_BYTES - 1) == 0 {
+        phy_mem_end
+    } else {
+        phy_mem_end - (phy_mem_end & (LARGE_PAGE_SIZE_BYTES - 1))
+    }
+}
+
+/// Maps the given range using large pages, i.e., 2 MiB
+/// in size. The `start_va` and `end_va` must be aligned
+/// to this size.
+fn map_kernel_range_large(
+    root_pgt: &mut RootPgt,
+    start_va: usize,
+    end_va: usize,
+    permissions: usize,
+) -> Result<(), VMError> {
+    assert_eq!(
+        0,
+        start_va & (LARGE_PAGE_SIZE_BYTES - 1),
+        "start_va must be aligned to the large page size"
+    );
+    assert_eq!(
+        0,
+        end_va & (LARGE_PAGE_SIZE_BYTES - 1),
+        "end_va must be aligned to the large page size"
+    );
+
+    let pte_flags = to_pte_flags(permissions)?;
+    (start_va..end_va)
+        .step_by(LARGE_PAGE_SIZE_BYTES)
+        .map(|va| (VPN::from_va(va), PPN::from_pa(get_pa_from_va(va))))
+        .try_for_each(|(vpn, ppn)| {
+            root_pgt
+                .map_create_large(vpn, ppn, pte_flags)
+                .map_err(|pgt_err| VMError::PgtError(vpn, pgt_err))?;
+            Ok(())
+        })
 }
 
 /// A collection of related [VMArea]s controlled by the

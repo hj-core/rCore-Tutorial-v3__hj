@@ -6,7 +6,7 @@ use alloc::vec::Vec;
 use riscv::regs::satp::{self, Mode};
 
 use crate::mm::page_alloc::{Page, alloc_page, alloc_zeroed_page};
-use crate::mm::{PAGE_SIZE_ORDER, PPN, VPN, get_pa_mut_ptr};
+use crate::mm::{LARGE_PAGE_SIZE_BYTES, PAGE_SIZE_ORDER, PPN, VPN, get_pa_mut_ptr};
 
 const PTES_PER_TABLE: usize = 512;
 
@@ -140,6 +140,55 @@ impl RootPgt {
             return Err(PgtError::DoubleMapping(vpn, ppn));
         }
         table[parsed_vpn[0]] = leaf_pte;
+
+        Ok(())
+    }
+
+    /// Maps the large page containing the `vpn` to the
+    /// large page containing `ppn` and constructs any
+    /// necessary intermediate page tables.
+    ///
+    /// If an error occurs, it returns the corresponding
+    /// [PgtError]. However, the newly created [PTE]s and
+    /// acquired [Page]s are not rolled back.
+    ///
+    /// A large page is [LARGE_PAGE_SIZE_BYTES] in size
+    /// and is aligned to that size as well.
+    pub(super) fn map_create_large(
+        &mut self,
+        vpn: VPN,
+        ppn: PPN,
+        pte_flags: usize,
+    ) -> Result<(), PgtError> {
+        let vpn = VPN::from_va(vpn.get_va() & !(LARGE_PAGE_SIZE_BYTES - 1));
+        let ppn = PPN::from_pa(ppn.get_pa() & !(LARGE_PAGE_SIZE_BYTES - 1));
+
+        let parsed_vpn = parse_vpn(vpn);
+        let leaf_pte = PTE::new(ppn, pte_flags)?;
+
+        // SAFETY:
+        // The RootPgt instance itself must point to a physical
+        // page holding the corresponding page table.
+        let level2_table = unsafe { Self::get_ptes_mut(self.ppn) };
+        if !level2_table[parsed_vpn[2]].is_valid() {
+            let page = alloc_zeroed_page().ok_or(PgtError::AcquirePageFailed)?;
+            level2_table[parsed_vpn[2]] = PTE::new(page.get_ppn(), PTE::FLAG_V)?;
+            self.pages.push(page);
+        }
+        if level2_table[parsed_vpn[2]].is_leaf() {
+            return Err(PgtError::DoubleMapping(vpn, ppn));
+        }
+
+        // SAFETY:
+        // The existing page table entry or the one we newly
+        // created must be valid and point to a physical page
+        // holding a page table; therefore, we can cast a slice
+        // over it.
+        let level1_table = unsafe { RootPgt::get_ptes_mut(level2_table[parsed_vpn[2]].get_ppn()) };
+        if level1_table[parsed_vpn[1]].is_leaf() {
+            return Err(PgtError::DoubleMapping(vpn, ppn));
+        }
+        level1_table[parsed_vpn[1]] = leaf_pte;
 
         Ok(())
     }

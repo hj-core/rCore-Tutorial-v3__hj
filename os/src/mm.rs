@@ -42,6 +42,8 @@ const MEM_SIZE_BYTES: usize = 128 << 20; // 128 MB
 
 const PAGE_SIZE_ORDER: usize = 12;
 const PAGE_SIZE_BYTES: usize = 1 << PAGE_SIZE_ORDER; // 4 KB
+const LARGE_PAGE_SIZE_ORDER: usize = 21;
+const LARGE_PAGE_SIZE_BYTES: usize = 1 << LARGE_PAGE_SIZE_ORDER; // 2 MiB
 
 const KERNEL_VA_OFFSET: usize = 0xffff_ffc0_0000_0000;
 const KERNEL_HEAP_SIZE_BYTES: usize = 4 << 20; // 4 MB
