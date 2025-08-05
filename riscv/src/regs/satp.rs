@@ -1,8 +1,8 @@
 const CSR_NO: usize = 0x180;
 
-/// Returns the satp value corresponding to the given `ppn` and
-/// `mode`. Any set bits in `ppn` other than the lower 44 bits
-/// are ignored.
+/// Returns the satp value corresponding to the given `ppn`
+/// and `mode`. Any set bits in `ppn` other than the lower
+/// 44 bits are ignored.
 pub fn compute_value(ppn: usize, mode: Mode) -> usize {
     let ppn = ppn & 0xfff_ffff_ffff;
     let mode_value = get_mode_value(mode);

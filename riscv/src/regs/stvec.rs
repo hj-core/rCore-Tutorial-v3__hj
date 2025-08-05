@@ -1,6 +1,7 @@
 use crate::csrw;
 
-const CSR_NO: usize = 0x105; // Value comes from the RISCV manual Vol II
+// Value comes from the RISCV manual Vol II
+const CSR_NO: usize = 0x105;
 const MODE_BITS: usize = 0b11;
 
 pub enum Mode {
@@ -10,10 +11,10 @@ pub enum Mode {
 
 /// Installs a new exception handler.
 ///
-/// The `base_addr` parameter specifies the address of the handler, and
-/// the `mode` parameter specifies the handler mode. Returns true if the
-/// handler was successfully installed, and false if the `base_addr` was
-/// not properly aligned.
+/// `base_addr` specifies the address of the handler, and
+/// the `mode` parameter specifies the handler mode. Returns
+/// true if the handler was successfully installed, and
+/// false if the `base_addr` was not properly aligned.
 pub fn install(base_addr: usize, mode: Mode) -> bool {
     if base_addr & MODE_BITS != 0 {
         return false;

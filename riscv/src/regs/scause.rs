@@ -3,9 +3,8 @@ use crate::csrr;
 const CSR_NO: usize = 0x142;
 const INTERRUPT_BIT: usize = 1 << 63;
 
-/// Reads the current value of the `scause` register.
 pub fn read() -> usize {
-    let mut result: usize;
+    let result: usize;
     csrr!(CSR_NO, result);
     result
 }
@@ -41,7 +40,7 @@ pub enum Cause {
     Unknown,
 }
 
-/// Returns the [Cause] corresponding to the value of the `scause` register.
+/// Returns the [Cause] corresponding to the `value`.
 pub fn match_cause(value: usize) -> Cause {
     if is_interrupt(value) {
         match_interrupt_cause(value)

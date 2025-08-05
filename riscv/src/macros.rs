@@ -1,7 +1,8 @@
 /// Reads a CSR.
 ///
-/// This macro reads the value of the CSR specified by `csr_no` and writes
-/// it to the variable `output`. It uses the `csrr` instruction.
+/// This macro reads the value of the CSR specified by
+/// `csr_no` and writes it to the variable `output`. It uses
+/// the `csrr` instruction.
 #[macro_export]
 macro_rules! csrr {
     ($csr_no:expr, $output:ident) => {
@@ -17,8 +18,8 @@ macro_rules! csrr {
 
 /// Writes a CSR.
 ///
-/// This macro writes the `value` to the CSR specified by `csr_no`. It uses
-/// the `csrw` instruction.
+/// This macro writes the `value` to the CSR specified by
+/// `csr_no`. It uses the `csrw` instruction.
 #[macro_export]
 macro_rules! csrw {
     ($csr_no:expr, $value:expr) => {
@@ -34,9 +35,10 @@ macro_rules! csrw {
 
 /// Clears bits in a CSR.
 ///
-/// This macro clears the bits specified by the `mask` in the CSR specified
-/// by `csr_no`, and writes the previous value of the CSR to the variable
-/// `output`. It uses the `csrrc` instruction.
+/// This macro clears the bits specified by the `mask` in
+/// the CSR specified by `csr_no`, and writes the previous
+/// value of the CSR to the variable `output`. It uses the
+/// `csrrc` instruction.
 #[macro_export]
 macro_rules! csrrc {
     ($csr_no:expr, $output:ident, $mask:expr) => {
@@ -53,9 +55,10 @@ macro_rules! csrrc {
 
 /// Sets bits in a CSR.
 ///
-/// This macro sets the bits specified by the `mask` in the CSR specified
-/// by `csr_no`, and writes the previous value of the CSR to the variable
-/// `output`. It uses the `csrrs` instruction.
+/// This macro sets the bits specified by the `mask` in the
+/// CSR specified by `csr_no`, and writes the previous value
+/// of the CSR to the variable `output`. It uses the `csrrs`
+/// instruction.
 #[macro_export]
 macro_rules! csrrs{
     ($csr_no:expr, $output:ident, $mask:expr) => {
