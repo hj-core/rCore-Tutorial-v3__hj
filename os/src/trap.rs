@@ -1,7 +1,7 @@
 use core::arch::{asm, global_asm};
 use riscv::regs::{
     scause::{self, Cause},
-    sie, sstatus, stval, stvec,
+    sepc, sie, sstatus, stval, stvec,
 };
 
 use crate::syscall;
@@ -15,7 +15,7 @@ global_asm!(include_str!("trap.S"));
 
 unsafe extern "C" {
     // Defined in trap.S
-    pub(super) unsafe fn __restore();
+    pub(super) unsafe fn __restore_u_ctx();
 }
 
 pub fn init() {
@@ -47,23 +47,33 @@ fn enable_timer_interrupts() {
 }
 
 #[unsafe(no_mangle)]
-fn trap_handler(context: &mut TrapContext) -> &mut TrapContext {
+fn k_trap_handler() {
+    let scause_val = scause::read();
+    let cause = scause::match_cause(scause_val);
+    let sepc = sepc::read();
+    let stval_val = stval::read();
+
+    panic!(
+        "Kernel trapped by {cause:?}, sepc={sepc:#x}, scause={scause_val:#x}, stval={stval_val:#x}"
+    )
+}
+
+#[unsafe(no_mangle)]
+fn u_trap_handler(context: &mut TrapContext) -> &mut TrapContext {
+    let task_id =
+        get_current_task_id().expect("Expect a task to be running when entering u_trap_handler");
     let scause_val = scause::read();
     let cause = scause::match_cause(scause_val);
     let stval_val = stval::read();
 
     match cause {
         Cause::SupervisorTimerInterrupt => {
-            if let Some(task_id) = get_current_task_id() {
-                exchange_current_task_state(TaskState::Running, TaskState::Ready)
-                    .expect("Expected the current TaskState to be Running");
-                record_current_run_end();
+            exchange_current_task_state(TaskState::Running, TaskState::Ready)
+                .expect("Expected the current TaskState to be Running");
+            record_current_run_end();
 
-                info!("Task {:?}: {:?}.", task_id, cause);
-                run_next_task();
-            } else {
-                panic!("Kernel received a {cause:?}");
-            }
+            info!("Task {:?}: {:?}.", task_id, cause);
+            run_next_task();
         }
 
         Cause::UserEnvironmentCall => {
@@ -77,49 +87,27 @@ fn trap_handler(context: &mut TrapContext) -> &mut TrapContext {
         }
 
         Cause::StoreOrAmoPageFault => {
-            if let Some(task_id) = get_current_task_id() {
-                exchange_current_task_state(TaskState::Running, TaskState::Killed)
-                    .expect("Expected the current TaskState to be Running");
-                record_current_run_end();
+            exchange_current_task_state(TaskState::Running, TaskState::Killed)
+                .expect("Expected the current TaskState to be Running");
+            record_current_run_end();
 
-                warn!("Task {:?}: {:?}, Kernel killed it.", task_id, cause);
-                run_next_task();
-            } else {
-                panic!("Kernel received a {cause:?}");
-            }
+            warn!("Task {:?}: {:?}, Kernel killed it.", task_id, cause);
+            run_next_task();
         }
 
         Cause::IllegalInstruction => {
-            if let Some(task_id) = get_current_task_id() {
-                exchange_current_task_state(TaskState::Running, TaskState::Killed)
-                    .expect("Expected the current TaskState to be Running");
-                record_current_run_end();
+            exchange_current_task_state(TaskState::Running, TaskState::Killed)
+                .expect("Expected the current TaskState to be Running");
+            record_current_run_end();
 
-                warn!("Task {:?}: {:?}, kernel killed it.", task_id, cause);
-                run_next_task();
-            } else {
-                panic!("Kernel received a {cause:?}");
-            }
-        }
-
-        Cause::Unknown => {
-            if let Some(task_id) = get_current_task_id() {
-                panic!(
-                    "Task {task_id:?}: Unknown trap, scause={scause_val:#x}, stval={stval_val:#x}, context={context:#?}",
-                )
-            } else {
-                panic!("Kernel received an unknown trap, scause={cause:?}, stval={stval_val:#x}");
-            }
+            warn!("Task {:?}: {:?}, kernel killed it.", task_id, cause);
+            run_next_task();
         }
 
         _ => {
-            if let Some(task_id) = get_current_task_id() {
-                panic!(
-                    "Task {task_id:?}: Unsupported trap {cause:?}, stval={stval_val:#x}, context={context:#x?}",
-                );
-            } else {
-                panic!("Kernel received a {:?}, stval={:#x}", cause, stval_val);
-            }
+            panic!(
+                "Task {task_id:?}: {cause:?}, scause={scause_val:#x}, stval={stval_val:#x}, context={context:#x?}",
+            );
         }
     }
 

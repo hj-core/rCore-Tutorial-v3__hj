@@ -1,30 +1,36 @@
 .altmacro
 
-.macro save_gp n
+.macro save_xn n
     sd x\n, \n*8(tp)
 .endm
 
-.macro restore_gp n
+.macro load_xn n
     ld x\n, \n*8(tp)
 .endm
 
     .global __stvec
-    .global __restore
-    .align 2                   # The lowest two bits are always zero and are overridden by mode
+    .global __restore_u_ctx
+    /* The lowest two bits are always zero and are overridden
+     * by mode.
+     */
+    .align 2
 __stvec:
     csrrw tp, sscratch, tp
 
-    /* If tp == 0, we are in kernel space and do not need to
-    * store the context. Otherwise, tp holds the address of
-    * the trap context, where we save our context, and it is also
-    * the current kernel sp.
-    */
-    beqz tp, DONE_SAVE
+    /* If tp == 0, the trap is caused by kernel code and will
+     * be handled by k_trap_handler.
+     *
+     * Otherwise, the trap is caused by user code and will be
+     * handled by u_trap_handler. In this case, tp holds the
+     * address of the trap context, where we save our context,
+     * which is also the current kernel sp.
+     */
+    beqz tp, __save_k_ctx
 
-SAVE_CONTEXT:
+__save_u_ctx:
     .set n, 0
     .rept 32
-        save_gp %n
+        save_xn %n
         .set n, n+1
     .endr
     csrrw x5, sscratch, x0
@@ -34,17 +40,11 @@ SAVE_CONTEXT:
     csrr x5, sepc
     sd x5, 33*8(tp)
     mv sp, tp
-DONE_SAVE:
 
-    mv a0, tp                  # Set the arugment for trap_handler, i.e., a pointer to the saved context
-    call trap_handler
+    mv a0, tp
+    call u_trap_handler
 
-__restore:
-    bnez tp, RESTORE_CONTEXT   # Same logic as the save_context
-    csrrw tp, sscratch, tp
-    sret
-
-RESTORE_CONTEXT:
+__restore_u_ctx:
     csrw sscratch, tp
     ld x5, 32*8(tp)
     csrw sstatus, x5
@@ -52,13 +52,49 @@ RESTORE_CONTEXT:
     csrw sepc, x5
     .set n, 5
     .rept 27
-        restore_gp %n
+        load_xn %n
         .set n, n+1
     .endr
-    restore_gp 1
-    restore_gp 2
-    restore_gp 3
-    restore_gp 4
-DONE_RESTORE:
+    load_xn 1
+    load_xn 2
+    load_xn 3
+    load_xn 4
 
+    sret
+
+__save_k_ctx:
+    addi tp, sp, -34*8
+    .set n, 0
+    .rept 32
+        save_xn %n
+        .set n, n+1
+    .endr
+    sd x0, 4*8(sp)
+    csrr x5, sstatus
+    sd x5, 32*8(tp)
+    csrr x5, sepc
+    sd x5, 33*8(tp)
+    mv sp, tp
+    mv tp, x0
+
+    mv a0, sp
+    call k_trap_handler
+
+__restore_k_ctx:
+    mv tp, sp
+    ld x5, 32*8(tp)
+    csrw sstatus, x5
+    ld x5, 33*8(tp)
+    csrw sepc, x5
+    .set n, 5
+    .rept 27
+        load_xn %n
+        .set n, n+1
+    .endr
+    load_xn 1
+    load_xn 2
+    load_xn 3
+    load_xn 4
+
+    csrrw tp, sscratch, tp
     sret

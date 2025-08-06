@@ -46,7 +46,7 @@ fn add_task(elf_bytes: &[u8]) {
 
     let tcb = TaskControlBlock::new_ready(
         vm_space,
-        trap::__restore as usize,
+        trap::__restore_u_ctx as usize,
         kernel_sp,
         kernel_sp,
         satp,
