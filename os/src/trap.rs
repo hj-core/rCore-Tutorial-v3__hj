@@ -4,7 +4,7 @@ use riscv::regs::{
     sepc, sie, sstatus, stval, stvec,
 };
 
-use crate::mm::prelude::{get_uaccess_fix, is_load_user_fault};
+use crate::mm::prelude::{get_uaccess_fix, is_load_user_fault, is_store_user_fault};
 use crate::syscall;
 use crate::task::prelude::{
     TaskState, exchange_current_task_state, get_current_task_id, record_current_run_end,
@@ -56,6 +56,10 @@ fn k_trap_handler(context: &mut TrapContext) {
 
     match cause {
         Cause::LoadPageFault if is_load_user_fault(sepc) => {
+            context.sepc = get_uaccess_fix();
+        }
+
+        Cause::StoreOrAmoPageFault if is_store_user_fault(sepc) => {
             context.sepc = get_uaccess_fix();
         }
 

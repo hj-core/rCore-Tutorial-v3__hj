@@ -16,5 +16,11 @@ fn main() -> i32 {
         println!("{:?}", task_info);
     }
 
+    println!("Get task info of task {} into a null pointer", 1);
+    let null_ptr = 0 as *mut TaskInfo;
+    let result = get_task_info(1, null_ptr);
+    assert_eq!(result, -1);
+    println!("Kernel survived writing to null pointer, good");
+
     0
 }

@@ -3,9 +3,7 @@ extern crate alloc;
 use alloc::vec;
 use core::str;
 
-use riscv::regs::sstatus;
-
-use crate::mm::prelude::{check_u_va_range, copy_from_user};
+use crate::mm::prelude::{check_u_va_range, copy_from_user, copy_to_user};
 use crate::task::prelude::{
     TaskInfo, TaskState, exchange_current_task_state, get_current_task_id, get_task_info,
     run_next_task,
@@ -96,12 +94,35 @@ fn sys_yield() -> isize {
 }
 
 fn sys_task_info(task_id: usize, data: *mut TaskInfo) -> isize {
+    let dst = data as *mut u8;
+    let len = size_of::<TaskInfo>();
+
+    if !check_u_va_range(dst.addr(), len) {
+        log_failed_copy_to(dst, len, len);
+        return -1;
+    }
+
     if let Some(task_info) = get_task_info(task_id) {
-        sstatus::set_sum_permit();
-        unsafe { data.write(task_info) }
-        sstatus::set_sum_deny();
-        0
+        let src = (&raw const task_info) as *const u8;
+        let failed_len = unsafe { copy_to_user(src, dst, len) };
+
+        if failed_len == 0 {
+            0
+        } else {
+            log_failed_copy_to(dst, len, failed_len);
+            -1
+        }
     } else {
         -1
     }
+}
+
+fn log_failed_copy_to(dst: *mut u8, len: usize, failed_len: usize) {
+    warn!(
+        "Task {:?}: Failed to copy to user, dst={:#x}, len={}, failed_len={}",
+        get_current_task_id().expect("Expect a running task"),
+        dst.addr(),
+        len,
+        failed_len,
+    );
 }
