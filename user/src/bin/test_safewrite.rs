@@ -16,6 +16,7 @@ use user_lib::{println, write};
 
 const STACK_SIZE: usize = 0x2000;
 const STACK_ALIGN: usize = 0x1000;
+const KERNEL_VA_OFFSET: usize = 0xffff_ffc0_0000_0000;
 
 const STDOUT: usize = 1;
 const DATA_STRING: &str = "string from data section\n";
@@ -43,6 +44,7 @@ pub fn main() -> i32 {
         }),
         -1
     );
+
     let (bottom, top) = unsafe { stack_range() };
     assert_eq!(
         write(STDOUT, unsafe {
@@ -53,6 +55,13 @@ pub fn main() -> i32 {
     assert_eq!(
         write(STDOUT, unsafe {
             slice::from_raw_parts((bottom - 5) as *const _, 10)
+        }),
+        -1
+    );
+
+    assert_eq!(
+        write(STDOUT, unsafe {
+            slice::from_raw_parts((KERNEL_VA_OFFSET + 0x1000) as *const _, 20)
         }),
         -1
     );

@@ -2,6 +2,7 @@ mod heap_alloc;
 mod page_alloc;
 pub mod prelude;
 mod sv39;
+mod uaccess;
 mod vm;
 
 use crate::{debug, log};

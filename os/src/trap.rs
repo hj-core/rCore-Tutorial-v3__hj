@@ -4,6 +4,7 @@ use riscv::regs::{
     sepc, sie, sstatus, stval, stvec,
 };
 
+use crate::mm::prelude::{get_uaccess_fix, is_load_user_fault};
 use crate::syscall;
 use crate::task::prelude::{
     TaskState, exchange_current_task_state, get_current_task_id, record_current_run_end,
@@ -47,15 +48,23 @@ fn enable_timer_interrupts() {
 }
 
 #[unsafe(no_mangle)]
-fn k_trap_handler() {
+fn k_trap_handler(context: &mut TrapContext) {
     let scause_val = scause::read();
     let cause = scause::match_cause(scause_val);
     let sepc = sepc::read();
     let stval_val = stval::read();
 
-    panic!(
-        "Kernel trapped by {cause:?}, sepc={sepc:#x}, scause={scause_val:#x}, stval={stval_val:#x}"
-    )
+    match cause {
+        Cause::LoadPageFault if is_load_user_fault(sepc) => {
+            context.sepc = get_uaccess_fix();
+        }
+
+        _ => {
+            panic!(
+                "Kernel trapped by {cause:?}, sepc={sepc:#x}, scause={scause_val:#x}, stval={stval_val:#x}"
+            )
+        }
+    }
 }
 
 #[unsafe(no_mangle)]

@@ -1,7 +1,11 @@
-use core::{slice, str};
+extern crate alloc;
+
+use alloc::vec;
+use core::str;
 
 use riscv::regs::sstatus;
 
+use crate::mm::prelude::{check_u_va_range, copy_from_user};
 use crate::task::prelude::{
     TaskInfo, TaskState, exchange_current_task_state, get_current_task_id, get_task_info,
     run_next_task,
@@ -28,20 +32,41 @@ pub fn syscall_handler(syscall_id: usize, args: [usize; 3]) -> isize {
 
 fn sys_write(fd: usize, buf: *const u8, count: usize) -> isize {
     if fd != FD_STDOUT {
-        let task_id = get_current_task_id();
         warn!(
-            "Task {:?} attempted write to an unsupported file descriptor {}",
-            task_id, fd
+            "Task {:?}: Unsupported file descriptor {}",
+            get_current_task_id().expect("Expect a running task"),
+            fd
         );
         return -1;
     }
 
-    sstatus::set_sum_permit();
-    let buf = unsafe { slice::from_raw_parts(buf, count) };
-    let str = str::from_utf8(buf).unwrap();
+    if !check_u_va_range(buf.addr(), count) {
+        log_failed_copy_from(buf, count, count);
+        return -1;
+    }
+
+    let mut dst = vec![0; count];
+    let failed_len = unsafe { copy_from_user(buf, dst.as_mut_ptr(), count) };
+
+    if failed_len != 0 {
+        log_failed_copy_from(buf, count, failed_len);
+        return -1;
+    }
+
+    let str = str::from_utf8(&dst).unwrap();
     print!("{str}");
-    sstatus::set_sum_deny();
+
     count as isize
+}
+
+fn log_failed_copy_from(src: *const u8, len: usize, failed_len: usize) {
+    warn!(
+        "Task {:?}: Failed to copy from user, src={:#x}, len={}, failed_len={}",
+        get_current_task_id().expect("Expect a running task"),
+        src.addr(),
+        len,
+        failed_len,
+    );
 }
 
 fn sys_exit(exit_code: isize) -> isize {
