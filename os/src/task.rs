@@ -41,8 +41,8 @@ fn add_task(elf_bytes: &[u8]) {
     let vm_space = VMSpace::new_user(elf_bytes).expect("Failed to create user vm space");
     let satp = vm_space.get_satp();
     let entry = vm_space.get_entry_addr();
-    let user_sp = vm_space.get_user_stack_end();
-    let kernel_sp = vm_space.get_kernel_stack_end() - size_of::<TrapContext>();
+    let user_sp = vm_space.get_u_stack_end();
+    let kernel_sp = vm_space.get_k_stack_end() - size_of::<TrapContext>();
 
     let tcb = TaskControlBlock::new_ready(
         vm_space,

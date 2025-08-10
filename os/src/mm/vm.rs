@@ -218,11 +218,31 @@ pub(crate) struct VMSpace {
     root_pgt: RootPgt,
     areas: Vec<VMArea>,
     entry_addr: usize,
-    user_stack_end: usize,
-    kernel_stack_end: usize,
+    /// The end of the task's user stack; i.e., the sp
+    /// value when the stack is empty.
+    u_stack_end: usize,
+    /// The end of the task's kernel stack, i.e., the sp
+    /// value when the stack is empty.
+    k_stack_end: usize,
 }
 
 impl VMSpace {
+    pub(crate) fn get_satp(&self) -> usize {
+        self.root_pgt.get_satp()
+    }
+
+    pub(crate) fn get_entry_addr(&self) -> usize {
+        self.entry_addr
+    }
+
+    pub(crate) fn get_u_stack_end(&self) -> usize {
+        self.u_stack_end
+    }
+
+    pub(crate) fn get_k_stack_end(&self) -> usize {
+        self.k_stack_end
+    }
+
     /// Returns a new user [VMSpace] with the `elf_bytes`
     /// mapped. Additionally, it inherits entries from the
     /// kernel's [RootPgt], and maps a user stack and a kernel
@@ -237,8 +257,8 @@ impl VMSpace {
             root_pgt,
             areas,
             entry_addr: 0,
-            user_stack_end: 0,
-            kernel_stack_end: 0,
+            u_stack_end: 0,
+            k_stack_end: 0,
         };
         result.map_user_elf(elf_bytes, MapType::Anonymous)?;
         result.map_user_stack()?;
@@ -429,7 +449,7 @@ impl VMSpace {
             self.map(VPN(v), area_id, None)?;
         }
 
-        self.user_stack_end = USER_SPACE_END;
+        self.u_stack_end = USER_SPACE_END;
         Ok(())
     }
 
@@ -446,24 +466,8 @@ impl VMSpace {
         area.pages.push(page);
         self.areas.push(area);
 
-        self.kernel_stack_end = end_vpn.get_va();
+        self.k_stack_end = end_vpn.get_va();
         Ok(())
-    }
-
-    pub(crate) fn get_satp(&self) -> usize {
-        self.root_pgt.get_satp()
-    }
-
-    pub(crate) fn get_entry_addr(&self) -> usize {
-        self.entry_addr
-    }
-
-    pub(crate) fn get_user_stack_end(&self) -> usize {
-        self.user_stack_end
-    }
-
-    pub(crate) fn get_kernel_stack_end(&self) -> usize {
-        self.kernel_stack_end
     }
 }
 
