@@ -1,22 +1,20 @@
+mod io;
+
 extern crate alloc;
 
-use alloc::vec;
-use core::str;
-
-use crate::mm::prelude::{check_u_va_range, copy_from_user, copy_to_user};
+use crate::mm::prelude::{check_u_va_range, copy_to_user};
+use crate::syscall::io::sys_write;
 use crate::task::prelude::{
     TaskInfo, TaskState, exchange_current_task_state, get_current_task_id, get_task_info,
     run_next_task,
 };
-use crate::{info, log, print, warn};
+use crate::{info, log, warn};
 
 const SYSCALL_WRITE: usize = 64;
 const SYSCALL_EXIT: usize = 93;
 const SYSCALL_YIELD: usize = 124;
 
 const SYSCALL_TASK_INFO: usize = (1 << 63) | 1;
-
-const FD_STDOUT: usize = 1;
 
 pub fn syscall_handler(syscall_id: usize, args: [usize; 3]) -> isize {
     match syscall_id {
@@ -26,45 +24,6 @@ pub fn syscall_handler(syscall_id: usize, args: [usize; 3]) -> isize {
         SYSCALL_TASK_INFO => sys_task_info(args[0], args[1] as *mut TaskInfo),
         _ => panic!("Unknown syscall, id={syscall_id}, args={args:?}"),
     }
-}
-
-fn sys_write(fd: usize, buf: *const u8, count: usize) -> isize {
-    if fd != FD_STDOUT {
-        warn!(
-            "Task {:?}: Unsupported file descriptor {}",
-            get_current_task_id().expect("Expect a running task"),
-            fd
-        );
-        return -1;
-    }
-
-    if !check_u_va_range(buf.addr(), count) {
-        log_failed_copy_from(buf, count, count);
-        return -1;
-    }
-
-    let mut dst = vec![0; count];
-    let failed_len = unsafe { copy_from_user(buf, dst.as_mut_ptr(), count) };
-
-    if failed_len != 0 {
-        log_failed_copy_from(buf, count, failed_len);
-        return -1;
-    }
-
-    let str = str::from_utf8(&dst).unwrap();
-    print!("{str}");
-
-    count as isize
-}
-
-fn log_failed_copy_from(src: *const u8, len: usize, failed_len: usize) {
-    warn!(
-        "Task {:?}: Failed to copy from user, src={:#x}, len={}, failed_len={}",
-        get_current_task_id().expect("Expect a running task"),
-        src.addr(),
-        len,
-        failed_len,
-    );
 }
 
 fn sys_exit(exit_code: isize) -> isize {
@@ -115,6 +74,16 @@ fn sys_task_info(task_id: usize, data: *mut TaskInfo) -> isize {
     } else {
         -1
     }
+}
+
+fn log_failed_copy_from(src: *const u8, len: usize, failed_len: usize) {
+    warn!(
+        "Task {:?}: Failed to copy from user, src={:#x}, len={}, failed_len={}",
+        get_current_task_id().expect("Expect a running task"),
+        src.addr(),
+        len,
+        failed_len,
+    );
 }
 
 fn log_failed_copy_to(dst: *mut u8, len: usize, failed_len: usize) {
