@@ -39,19 +39,20 @@ const QEMU_VIRT_MMIO: &[(usize, usize)] = &[
 ];
 
 const MEM_START_PA: usize = 0x8000_0000;
-const MEM_SIZE_BYTES: usize = 128 << 20; // 128 MB
+const MEM_SIZE_BYTES: usize = 128 << 20; // 128 MiB
 
 const PAGE_SIZE_ORDER: usize = 12;
-const PAGE_SIZE_BYTES: usize = 1 << PAGE_SIZE_ORDER; // 4 KB
+const PAGE_SIZE_BYTES: usize = 1 << PAGE_SIZE_ORDER; // 4 KiB
 const LARGE_PAGE_SIZE_ORDER: usize = 21;
 const LARGE_PAGE_SIZE_BYTES: usize = 1 << LARGE_PAGE_SIZE_ORDER; // 2 MiB
 
 const KERNEL_VA_OFFSET: usize = 0xffff_ffc0_0000_0000;
-const KERNEL_HEAP_SIZE_BYTES: usize = 4 << 20; // 4 MB
+const KERNEL_HEAP_SIZE_BYTES: usize = 4 << 20; // 4 MiB
 
 // Subtract one page because 0x40_0000_0000 is not a
 // valid virtual address in Sv39.
 const USER_SPACE_END: usize = 0x40_0000_0000 - PAGE_SIZE_BYTES;
+const USER_STACK_MAX_SIZE_BYTES: usize = 8 << 20; // 8 MiB
 
 pub(crate) fn init() {
     clear_bss();

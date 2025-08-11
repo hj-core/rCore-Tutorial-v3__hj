@@ -10,9 +10,9 @@ use crate::mm::page_alloc::{Page, alloc_page, alloc_zeroed_page};
 use crate::mm::sv39::{PTE, PgtError, RootPgt};
 use crate::mm::{
     KERNEL_VA_OFFSET, LARGE_PAGE_SIZE_BYTES, MEM_SIZE_BYTES, MEM_START_PA, PAGE_SIZE_BYTES,
-    PAGE_SIZE_ORDER, PPN, QEMU_VIRT_MMIO, USER_SPACE_END, VPN, bss_end, bss_start, data_end,
-    data_start, get_pa_from_va, get_pa_mut_ptr, get_va_from_pa, kernel_end, kernel_stack_end,
-    kernel_stack_start, rodata_end, rodata_start, text_end, text_start,
+    PAGE_SIZE_ORDER, PPN, QEMU_VIRT_MMIO, USER_SPACE_END, USER_STACK_MAX_SIZE_BYTES, VPN, bss_end,
+    bss_start, data_end, data_start, get_pa_from_va, get_pa_mut_ptr, get_va_from_pa, kernel_end,
+    kernel_stack_end, kernel_stack_start, rodata_end, rodata_start, text_end, text_start,
 };
 
 const ALL_PERMISSION_FLAGS: usize = PERMISSION_R | PERMISSION_W | PERMISSION_X | PERMISSION_U;
@@ -261,7 +261,7 @@ impl VMSpace {
             k_stack_end: 0,
         };
         result.map_user_elf(elf_bytes, MapType::Anonymous)?;
-        result.map_user_stack()?;
+        result.add_user_stack_area()?;
         result.add_kernel_stack_area()?;
         Ok(result)
     }
@@ -432,10 +432,12 @@ impl VMSpace {
         }
     }
 
-    /// Maps a user stack of two pages right below the [USER_SPACE_END].
-    fn map_user_stack(&mut self) -> Result<(), VMError> {
+    /// Adds an area of [USER_STACK_MAX_SIZE_BYTES] that ends
+    /// at [USER_SPACE_END] for the user stack. Lazily maps
+    /// the pages, except the first page.
+    fn add_user_stack_area(&mut self) -> Result<(), VMError> {
         let end_vpn = VPN::from_va(USER_SPACE_END);
-        let start_vpn = VPN::from_va(USER_SPACE_END - 2 * PAGE_SIZE_BYTES);
+        let start_vpn = VPN::from_va(USER_SPACE_END - USER_STACK_MAX_SIZE_BYTES);
         let area = VMArea::new(
             start_vpn,
             end_vpn,
@@ -445,16 +447,20 @@ impl VMSpace {
 
         self.areas.push(area);
         let area_id = self.find_area(start_vpn)?;
-        for v in start_vpn.0..end_vpn.0 {
-            self.map(VPN(v), area_id, None)?;
-        }
+
+        // Lazy mapping the user stack, except the first page
+        self.map(
+            VPN::from_va(USER_SPACE_END - PAGE_SIZE_BYTES),
+            area_id,
+            None,
+        )?;
 
         self.u_stack_end = USER_SPACE_END;
         Ok(())
     }
 
-    /// Assigns a page in the kernel memory range to be
-    /// the kernel stack for this user space.
+    /// Assigns a page in the kernel memory range to be the
+    /// kernel stack for this user space.
     fn add_kernel_stack_area(&mut self) -> Result<(), VMError> {
         let page = alloc_page().ok_or(VMError::AcquirePageFailed)?;
         let ppn = page.get_ppn();
