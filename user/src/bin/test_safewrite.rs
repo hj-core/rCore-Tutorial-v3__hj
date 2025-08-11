@@ -14,7 +14,7 @@ use user_lib::{println, write};
 /// strin
 /// Test write OK!
 
-const STACK_SIZE: usize = 0x2000;
+const INIT_STACK_SIZE: usize = 0x2000;
 const STACK_ALIGN: usize = 0x1000;
 const KERNEL_VA_OFFSET: usize = 0xffff_ffc0_0000_0000;
 
@@ -32,7 +32,7 @@ unsafe fn stack_range() -> (usize, usize) {
     // Require the sp to be in the top half of the user stack, which should
     // be fine for the current case.
     let top = (sp + STACK_ALIGN - 1) & (!(STACK_ALIGN - 1));
-    (top - STACK_SIZE, top)
+    (top - INIT_STACK_SIZE, top)
 }
 
 #[unsafe(no_mangle)]
@@ -56,7 +56,7 @@ pub fn main() -> i32 {
         write(STDOUT, unsafe {
             slice::from_raw_parts((bottom - 5) as *const _, 10)
         }),
-        -1
+        10
     );
 
     assert_eq!(
