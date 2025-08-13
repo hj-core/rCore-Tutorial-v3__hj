@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 use core::arch::{asm, global_asm};
 use core::ptr::null_mut;
 
-use crate::mm::prelude::VMSpace;
+use crate::mm::prelude::{VMError, VMSpace};
 use crate::sbi::shutdown;
 use crate::sync::spin::SpinLock;
 use crate::timer;
@@ -136,6 +136,22 @@ fn take_task_tcb(tasks: &mut Vec<TaskControlBlock>, task_id: usize) -> Option<Ta
     let rand_index = timer::read_time() % tasks.len();
     tasks.swap(index, rand_index);
     Some(tasks.swap_remove(rand_index))
+}
+
+/// Tries to fix the page fault for the task by mapping
+/// the page containing address `stval` into its [VMSpace].
+pub(crate) fn do_page_fault(
+    task_id: usize,
+    stval: usize,
+    min_permissions: usize,
+) -> Result<(), VMError> {
+    ALL_TASKS
+        .lock()
+        .iter_mut()
+        .find(|tcb| tcb.get_task_id() == task_id)
+        .expect("Cannot find a task with the task_id")
+        .get_vm_space_mut()
+        .map_fault_page(stval, min_permissions)
 }
 
 /// Changes the state of the current task to `new` if

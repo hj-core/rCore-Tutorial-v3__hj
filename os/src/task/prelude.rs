@@ -1,4 +1,5 @@
 pub(crate) use super::TaskInfo;
+pub(crate) use super::do_page_fault;
 pub(crate) use super::exchange_current_task_state;
 pub(crate) use super::get_current_task_id;
 pub(crate) use super::get_task_info;

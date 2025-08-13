@@ -1,14 +1,18 @@
 use core::arch::{asm, global_asm};
+
 use riscv::regs::{
     scause::{self, Cause},
     sepc, sie, sstatus, stval, stvec,
 };
 
-use crate::mm::prelude::{get_uaccess_fix, is_load_user_fault, is_store_user_fault};
+use crate::mm::prelude::{
+    PERMISSION_R, PERMISSION_U, PERMISSION_W, check_u_va, get_uaccess_fix, is_load_user_fault,
+    is_store_user_fault,
+};
 use crate::syscall;
 use crate::task::prelude::{
-    TaskState, exchange_current_task_state, get_current_task_id, record_current_run_end,
-    record_current_syscall, run_next_task,
+    TaskState, do_page_fault, exchange_current_task_state, get_current_task_id,
+    record_current_run_end, record_current_syscall, run_next_task,
 };
 use crate::{info, log, warn};
 
@@ -99,13 +103,32 @@ fn u_trap_handler(context: &mut TrapContext) -> &mut TrapContext {
                     as usize;
         }
 
-        Cause::StoreOrAmoPageFault => {
-            exchange_current_task_state(TaskState::Running, TaskState::Killed)
-                .expect("Expected the current TaskState to be Running");
-            record_current_run_end();
+        Cause::StoreOrAmoPageFault if check_u_va(stval_val) => {
+            if let Err(err) = do_page_fault(task_id, stval_val, PERMISSION_U | PERMISSION_W) {
+                exchange_current_task_state(TaskState::Running, TaskState::Killed)
+                    .expect("Expected the current TaskState to be Running");
+                record_current_run_end();
 
-            warn!("Task {:?}: {:?}, Kernel killed it.", task_id, cause);
-            run_next_task();
+                warn!(
+                    "Task {:?}: {:?}, stval={:#x}, sepc={:#x}.  Map page attempt failed with {:?}.  Kernel killed it.",
+                    task_id, cause, stval_val, context.sepc, err
+                );
+                run_next_task();
+            }
+        }
+
+        Cause::LoadPageFault if check_u_va(stval_val) => {
+            if let Err(err) = do_page_fault(task_id, stval_val, PERMISSION_U | PERMISSION_R) {
+                exchange_current_task_state(TaskState::Running, TaskState::Killed)
+                    .expect("Expected the current TaskState to be Running");
+                record_current_run_end();
+
+                warn!(
+                    "Task {:?}: {:?}, stval={:#x}, sepc={:#x}. Map page attempt failed with {:?}. Kernel killed it.",
+                    task_id, cause, stval_val, context.sepc, err
+                );
+                run_next_task();
+            }
         }
 
         Cause::IllegalInstruction => {

@@ -38,6 +38,10 @@ impl TaskControlBlock {
         self.task_id
     }
 
+    pub(super) fn get_vm_space_mut(&mut self) -> &mut VMSpace {
+        &mut self.vm_space
+    }
+
     pub(super) fn get_state(&self) -> TaskState {
         self.state
     }

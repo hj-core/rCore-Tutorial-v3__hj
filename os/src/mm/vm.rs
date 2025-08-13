@@ -16,10 +16,10 @@ use crate::mm::{
 };
 
 const ALL_PERMISSION_FLAGS: usize = PERMISSION_R | PERMISSION_W | PERMISSION_X | PERMISSION_U;
-const PERMISSION_R: usize = PTE::FLAG_R;
-const PERMISSION_W: usize = PTE::FLAG_W;
-const PERMISSION_X: usize = PTE::FLAG_X;
-const PERMISSION_U: usize = PTE::FLAG_U;
+pub(crate) const PERMISSION_R: usize = PTE::FLAG_R;
+pub(crate) const PERMISSION_W: usize = PTE::FLAG_W;
+pub(crate) const PERMISSION_X: usize = PTE::FLAG_X;
+pub(crate) const PERMISSION_U: usize = PTE::FLAG_U;
 
 fn to_pte_flags(permissions: usize) -> Result<usize, VMError> {
     if permissions & !ALL_PERMISSION_FLAGS != 0 {
@@ -475,6 +475,25 @@ impl VMSpace {
         self.k_stack_end = end_vpn.get_va();
         Ok(())
     }
+
+    /// Tries to map the `va` with the `min_permissions` into
+    /// this [VMSpace]. The actual permissions follow the [VMArea]
+    /// containing the `va`.
+    pub(crate) fn map_fault_page(
+        &mut self,
+        va: usize,
+        min_permissions: usize,
+    ) -> Result<(), VMError> {
+        let vpn = VPN::from_va(va);
+        let area_id = self.find_area(vpn)?;
+
+        let permissions = self.get_area(area_id)?.permissions;
+        if min_permissions & permissions != min_permissions {
+            return Err(VMError::PermissionDenied(min_permissions));
+        }
+
+        self.map(vpn, area_id, None)
+    }
 }
 
 /// An abstraction over a range of virtual memory.
@@ -518,6 +537,7 @@ pub(crate) enum VMError {
     VpnNotBelongArea(VPN, usize),
     InvalidAreaId(usize),
     InvalidPermissions(usize),
+    PermissionDenied(usize),
     ElfError(&'static str),
     DataExceedPage(VPN),
     AlignDataFailed(usize),

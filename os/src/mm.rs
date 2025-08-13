@@ -85,6 +85,19 @@ fn get_pa_from_va(va: usize) -> usize {
     va.checked_sub(KERNEL_VA_OFFSET).expect("address underflow")
 }
 
+/// Returns whether the whole va range is inside user space.
+pub(crate) fn check_u_va_range(start: usize, len: usize) -> bool {
+    check_u_va(start)
+        && start
+            .checked_add(len)
+            .is_some_and(|end| check_u_va(end - 1))
+}
+
+/// Returns whether the va is inside user space.
+pub(crate) fn check_u_va(va: usize) -> bool {
+    va < USER_SPACE_END
+}
+
 /// Physical Page Number
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct PPN(usize);

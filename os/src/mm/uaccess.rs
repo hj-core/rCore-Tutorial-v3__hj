@@ -2,8 +2,6 @@ use core::arch::global_asm;
 
 use riscv::regs::sstatus;
 
-use crate::mm::USER_SPACE_END;
-
 global_asm!(include_str!("uaccess.S"));
 
 unsafe extern "C" {
@@ -53,17 +51,6 @@ pub(crate) unsafe fn copy_to_user(src: *const u8, dst: *mut u8, len: usize) -> u
     let result = unsafe { __uaccess(src, dst, len) };
     sstatus::set_sum_deny();
     result
-}
-
-pub(crate) fn check_u_va_range(start: usize, len: usize) -> bool {
-    check_u_va(start)
-        && start
-            .checked_add(len)
-            .is_some_and(|end| check_u_va(end - 1))
-}
-
-fn check_u_va(va: usize) -> bool {
-    va < USER_SPACE_END
 }
 
 pub(crate) fn is_load_user_fault(sepc: usize) -> bool {
