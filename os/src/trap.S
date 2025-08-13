@@ -40,7 +40,6 @@ __save_u_ctx:
     csrr x5, sepc
     sd x5, 33*8(tp)
     mv sp, tp
-
     mv a0, tp
     call u_trap_handler
 
@@ -59,28 +58,29 @@ __restore_u_ctx:
     load_xn 2
     load_xn 3
     load_xn 4
-
     sret
 
 __save_k_ctx:
-    addi tp, sp, -34*8
+    addi tp, sp, -35*8
     .set n, 0
     .rept 32
         save_xn %n
         .set n, n+1
     .endr
-    sd x0, 4*8(sp)
+    csrrw x5, sscratch, x0
+    sd x5, 4*8(tp)
     csrr x5, sstatus
     sd x5, 32*8(tp)
     csrr x5, sepc
     sd x5, 33*8(tp)
+    sd x0, 34*8(tp)
     mv sp, tp
+    mv a0, tp
     mv tp, x0
-
-    mv a0, sp
     call k_trap_handler
 
 __restore_k_ctx:
+    csrw sscratch, x0
     mv tp, sp
     ld x5, 32*8(tp)
     csrw sstatus, x5
@@ -95,6 +95,4 @@ __restore_k_ctx:
     load_xn 2
     load_xn 3
     load_xn 4
-
-    csrrw tp, sscratch, tp
     sret
