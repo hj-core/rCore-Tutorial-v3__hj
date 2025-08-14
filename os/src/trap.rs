@@ -100,8 +100,8 @@ fn k_trap_handler(context: &mut TrapContext) {
 
 #[unsafe(no_mangle)]
 fn u_trap_handler(context: &mut TrapContext) -> &mut TrapContext {
-    let task_id =
-        get_current_task_id().expect("Expect a task to be running when entering u_trap_handler");
+    let task_id = get_current_task_id()
+        .expect("Expect the hart is running a task when entering u_trap_handler");
     let scause_val = scause::read();
     let cause = scause::match_cause(scause_val);
     let stval_val = stval::read();
@@ -133,7 +133,7 @@ fn u_trap_handler(context: &mut TrapContext) -> &mut TrapContext {
                 record_current_run_end();
 
                 warn!(
-                    "Task {:?}: {:?}, stval={:#x}, sepc={:#x}.  Map page attempt failed with {:?}.  Kernel killed it.",
+                    "Task {:?}: {:?}, stval={:#x}, sepc={:#x}. Mapping the faulted page failed with {:?}. Kernel killed it.",
                     task_id, cause, stval_val, context.sepc, err
                 );
                 run_next_task();
@@ -147,7 +147,7 @@ fn u_trap_handler(context: &mut TrapContext) -> &mut TrapContext {
                 record_current_run_end();
 
                 warn!(
-                    "Task {:?}: {:?}, stval={:#x}, sepc={:#x}. Map page attempt failed with {:?}. Kernel killed it.",
+                    "Task {:?}: {:?}, stval={:#x}, sepc={:#x}. Mapping the faulted page failed with {:?}. Kernel killed it.",
                     task_id, cause, stval_val, context.sepc, err
                 );
                 run_next_task();
