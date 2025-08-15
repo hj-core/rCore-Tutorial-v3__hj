@@ -5,9 +5,9 @@
 # docker run -it --rm -v path/to/local/repo:/rcore-repo imageName
 
 ######## STAGE 1: Build QEMU
-FROM ubuntu:20.04 AS build_qemu
+FROM ubuntu:25.04 AS build_qemu
 # Download QEMU
-ARG QEMU_VERSION=7.0.0
+ARG QEMU_VERSION=9.2.4
 ADD https://download.qemu.org/qemu-${QEMU_VERSION}.tar.xz .
 # Install QEMU build dependencies
 RUN apt-get update \
@@ -15,7 +15,9 @@ RUN apt-get update \
     build-essential \
     libglib2.0-dev \
     libpixman-1-dev \
+    git \
     ninja-build \
+    python3-venv \
     zlib1g-dev
 # Build QEMU
 RUN tar xf qemu-${QEMU_VERSION}.tar.xz \
@@ -26,7 +28,7 @@ RUN tar xf qemu-${QEMU_VERSION}.tar.xz \
 ######## STAGE FINAL:
 FROM ubuntu:25.04 AS rcore
 # Copy QEMU and configure environmental variables
-ARG QEMU_VERSION=7.0.0
+ARG QEMU_VERSION=9.2.4
 COPY --from=build_qemu qemu-${QEMU_VERSION}/build qemu-${QEMU_VERSION}/build
 ENV PATH=$PATH:/qemu-${QEMU_VERSION}/build
 # Install dependencies and tools
