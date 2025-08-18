@@ -33,7 +33,6 @@ build:
 .PHONY: clean
 clean:
 	@cargo clean
-	@rm src/linker.ld
 
 .PHONY: run
 run: build
