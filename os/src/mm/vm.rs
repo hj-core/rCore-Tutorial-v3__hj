@@ -260,19 +260,15 @@ impl VMSpace {
             u_stack_end: 0,
             k_stack_end: 0,
         };
-        result.map_user_elf(elf_bytes, MapType::Anonymous)?;
+        result.map_user_elf(elf_bytes)?;
         result.add_user_stack_area()?;
         result.add_kernel_stack_area()?;
         Ok(result)
     }
 
-    /// Maps the `elf_bytes`, creating the necessary [VMArea]s
-    /// and [PTE]s.
-    fn map_user_elf(
-        self: &mut VMSpace,
-        elf_bytes: &[u8],
-        map_type: MapType,
-    ) -> Result<(), VMError> {
+    /// Maps the `elf_bytes` in [MapType::Anonymous], creating
+    /// the necessary [VMArea]s and [PTE]s.
+    fn map_user_elf(self: &mut VMSpace, elf_bytes: &[u8]) -> Result<(), VMError> {
         let elf = ElfFile::new(elf_bytes).map_err(|msg| VMError::ElfError(msg))?;
 
         for ph in elf.program_iter() {
@@ -280,43 +276,54 @@ impl VMSpace {
             if ph_type != program::Type::Load {
                 continue;
             }
-
-            let align = ph.align() as usize;
-            if PAGE_SIZE_BYTES % align != 0 {
-                return Err(VMError::AlignDataFailed(align));
-            }
-
-            let area = Self::create_area_from_ph(&ph, map_type)?;
-            let start_vpn = area.start_vpn;
-            let end_vpn = area.end_vpn;
-            self.areas.push(area);
-
-            let area_id = self.find_area(start_vpn)?;
-            let mut file_start = ph.offset() as usize;
-            let file_end = file_start + ph.file_size() as usize;
-
-            for v in start_vpn.0..end_vpn.0 {
-                let data = if file_start < file_end {
-                    let bytes =
-                        &elf_bytes[file_start..(file_start + PAGE_SIZE_BYTES).min(file_end)];
-                    file_start += PAGE_SIZE_BYTES;
-
-                    Some(bytes)
-                } else {
-                    None
-                };
-                self.map(VPN(v), area_id, data)?;
-            }
+            self.map_user_elf_segment(elf_bytes, &ph)?
         }
 
         self.entry_addr = elf.header.pt2.entry_point() as usize;
         Ok(())
     }
 
-    fn create_area_from_ph(
+    fn map_user_elf_segment(
+        self: &mut VMSpace,
+        elf_bytes: &[u8],
         ph: &program::ProgramHeader,
-        map_type: MapType,
-    ) -> Result<VMArea, VMError> {
+    ) -> Result<(), VMError> {
+        let align = ph.align() as usize;
+        if PAGE_SIZE_BYTES % align != 0 {
+            return Err(VMError::AlignDataFailed(align));
+        }
+
+        let mut area = Self::create_area_from_ph(&ph)?;
+        let pte_flags = to_pte_flags(area.permissions)?;
+        let mut data_start = ph.offset() as usize;
+        let data_end = data_start + ph.file_size() as usize;
+
+        for v in area.start_vpn.0..area.end_vpn.0 {
+            let vpn = VPN(v);
+            let page = alloc_zeroed_page().ok_or(VMError::AcquirePageFailed)?;
+            let ppn = page.get_ppn();
+
+            if data_start < data_end {
+                unsafe {
+                    Self::copy_data(
+                        ppn.get_pa(),
+                        &elf_bytes[data_start..(data_start + PAGE_SIZE_BYTES).min(data_end)],
+                    );
+                }
+                data_start += PAGE_SIZE_BYTES;
+            };
+
+            self.root_pgt
+                .map_create(vpn, ppn, pte_flags)
+                .map_err(|pgt_err| VMError::PgtError(vpn, pgt_err))?;
+            area.pages.push(page)
+        }
+
+        self.areas.push(area);
+        Ok(())
+    }
+
+    fn create_area_from_ph(ph: &program::ProgramHeader) -> Result<VMArea, VMError> {
         let va_start = ph.virtual_addr() as usize;
         let mem_size = ph.mem_size() as usize;
 
@@ -324,7 +331,12 @@ impl VMSpace {
         let end_vpn = VPN::from_va(va_start + mem_size + PAGE_SIZE_BYTES - 1);
         let permissions = Self::get_permissions_from_ph_flags(ph.flags());
 
-        Ok(VMArea::new(start_vpn, end_vpn, map_type, permissions))
+        Ok(VMArea::new(
+            start_vpn,
+            end_vpn,
+            MapType::Anonymous,
+            permissions,
+        ))
     }
 
     fn get_permissions_from_ph_flags(flags: program::Flags) -> usize {
@@ -341,6 +353,23 @@ impl VMSpace {
         }
 
         result
+    }
+
+    /// Copies `data` to the memory starting at `pa`.
+    ///
+    /// At most [PAGE_SIZE_BYTES] bytes are copied. If `data`
+    /// is larger than a page, the extra data is ignored.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that the address range starting
+    /// from `addr` with a length of `data.len().min(PAGE_SIZE_BYTES)`
+    /// is valid and writable.
+    unsafe fn copy_data(pa: usize, data: &[u8]) {
+        let start = get_pa_mut_ptr(pa);
+        for offset in 0..data.len().min(PAGE_SIZE_BYTES) {
+            unsafe { start.add(offset).write_volatile(data[offset]) };
+        }
     }
 
     /// Returns an identifier to the [VMArea] containing the `vpn`,
@@ -413,23 +442,6 @@ impl VMSpace {
             unsafe { Self::copy_data(ppn.get_pa(), data) }
         }
         Ok(())
-    }
-
-    /// Copies `data` to the memory starting at `pa`.
-    ///
-    /// At most [PAGE_SIZE_BYTES] bytes are copied. If `data`
-    /// is larger than a page, the extra data is ignored.
-    ///
-    /// # Safety
-    ///
-    /// The caller must ensure that the address range starting
-    /// from `addr` with a length of `data.len().min(PAGE_SIZE_BYTES)`
-    /// is valid and writable.
-    unsafe fn copy_data(pa: usize, data: &[u8]) {
-        let start = get_pa_mut_ptr(pa);
-        for offset in 0..data.len().min(PAGE_SIZE_BYTES) {
-            unsafe { start.add(offset).write_volatile(data[offset]) };
-        }
     }
 
     /// Adds an area of [USER_STACK_MAX_SIZE_BYTES] that ends
