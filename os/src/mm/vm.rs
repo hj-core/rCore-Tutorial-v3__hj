@@ -1,9 +1,9 @@
 extern crate alloc;
 
+use alloc::vec::Vec;
 use core::arch::asm;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-use alloc::vec::Vec;
 use xmas_elf::{ElfFile, program};
 
 use crate::mm::page_alloc::{Page, alloc_page, alloc_zeroed_page};
@@ -227,22 +227,6 @@ pub(crate) struct VMSpace {
 }
 
 impl VMSpace {
-    pub(crate) fn get_satp(&self) -> usize {
-        self.root_pgt.get_satp()
-    }
-
-    pub(crate) fn get_entry_addr(&self) -> usize {
-        self.entry_addr
-    }
-
-    pub(crate) fn get_u_stack_end(&self) -> usize {
-        self.u_stack_end
-    }
-
-    pub(crate) fn get_k_stack_end(&self) -> usize {
-        self.k_stack_end
-    }
-
     /// Returns a new user [VMSpace] with the `elf_bytes`
     /// mapped. Additionally, it inherits entries from the
     /// kernel's [RootPgt], and maps a user stack and a kernel
@@ -416,76 +400,61 @@ impl VMSpace {
         Ok(())
     }
 
-    /// Returns an identifier to the [VMArea] containing the `vpn`,
-    /// Or a [VMError] if such area does not exist.
-    fn find_area(&self, vpn: VPN) -> Result<usize, VMError> {
-        self.areas
-            .iter()
-            .rposition(|area| area.start_vpn <= vpn && vpn < area.end_vpn)
-            .ok_or(VMError::NoAreaContainVpn(vpn))
+    pub(crate) fn get_satp(&self) -> usize {
+        self.root_pgt.get_satp()
     }
 
-    fn get_area(&self, area_id: usize) -> Result<&VMArea, VMError> {
-        self.areas
-            .get(area_id)
-            .ok_or(VMError::InvalidAreaId(area_id))
+    pub(crate) fn get_entry_addr(&self) -> usize {
+        self.entry_addr
     }
 
-    fn get_area_mut(&mut self, area_id: usize) -> Result<&mut VMArea, VMError> {
-        self.areas
-            .get_mut(area_id)
-            .ok_or(VMError::InvalidAreaId(area_id))
+    pub(crate) fn get_u_stack_end(&self) -> usize {
+        self.u_stack_end
     }
 
-    /// Maps the `vpn` based on the [VMArea]. If `data` is
-    /// not [None], it also copies the data to the mapped
-    /// physical page.
-    fn map(&mut self, vpn: VPN, area_id: usize, data: Option<&[u8]>) -> Result<(), VMError> {
-        let area = self.get_area(area_id)?;
-        if vpn < area.start_vpn || vpn >= area.end_vpn {
-            return Err(VMError::VpnNotBelongArea(vpn, area_id));
+    pub(crate) fn get_k_stack_end(&self) -> usize {
+        self.k_stack_end
+    }
+
+    /// Maps the `vpn`, requesting at least the `min_permissions`.
+    fn map(&mut self, vpn: VPN, min_permissions: usize) -> Result<(), VMError> {
+        let area = self.find_area_mut(vpn)?;
+
+        let permissions = area.permissions;
+        if min_permissions & permissions != min_permissions {
+            return Err(VMError::PermissionDenied(vpn, min_permissions));
         }
 
         let map_type = area.map_type;
-
-        if data.is_some_and(|data| data.len() > PAGE_SIZE_BYTES) {
-            return Err(VMError::DataExceedPage(vpn));
+        if !matches!(map_type, MapType::Anonymous) {
+            panic!("Unexpected MapType {:?}.", map_type)
         }
 
-        match map_type {
-            MapType::Anonymous => unsafe { self.map_anonymous(vpn, area_id, data) },
-            MapType::KernelVaOffset => panic!("Should already inherit from kernel space"),
-        }
-    }
-
-    /// Maps the `vpn` to a newly allocated physical page.
-    /// If `data` is not [None], it also copies the data to
-    /// the mapped physical page.
-    ///
-    /// # Safety
-    ///
-    /// - `vpn` should within the [VMArea] that has the `area_id`.
-    unsafe fn map_anonymous(
-        &mut self,
-        vpn: VPN,
-        area_id: usize,
-        data: Option<&[u8]>,
-    ) -> Result<(), VMError> {
         let page = alloc_zeroed_page().ok_or(VMError::AcquirePageFailed)?;
         let ppn = page.get_ppn();
-
-        let area = self.get_area_mut(area_id)?;
-        let pte_flags = to_pte_flags(area.permissions)?;
-
         area.pages.push(page);
-        self.root_pgt
-            .map_create(vpn, ppn, pte_flags)
-            .map_err(|pgt_err| VMError::PgtError(vpn, pgt_err))?;
 
-        if let Some(data) = data {
-            unsafe { Self::copy_data(ppn.get_pa(), data) }
+        let pte_flags = to_pte_flags(area.permissions)?;
+        let result = self
+            .root_pgt
+            .map_create(vpn, ppn, pte_flags)
+            .map_err(|pgt_err| VMError::PgtError(vpn, pgt_err));
+
+        if result.is_err() {
+            let area = self.find_area_mut(vpn).unwrap();
+            area.pages.pop();
         }
-        Ok(())
+
+        result
+    }
+
+    /// Returns a mutable reference to the [VMArea] containing
+    /// the `vpn`, or a [VMError] if such area does not exist.
+    fn find_area_mut(&mut self, vpn: VPN) -> Result<&mut VMArea, VMError> {
+        self.areas
+            .iter_mut()
+            .find(|area| area.contain_vpn(vpn))
+            .ok_or(VMError::NoAreaContainVpn(vpn))
     }
 
     /// Tries to map the `va` with the `min_permissions` into
@@ -496,15 +465,7 @@ impl VMSpace {
         va: usize,
         min_permissions: usize,
     ) -> Result<(), VMError> {
-        let vpn = VPN::from_va(va);
-        let area_id = self.find_area(vpn)?;
-
-        let permissions = self.get_area(area_id)?.permissions;
-        if min_permissions & permissions != min_permissions {
-            return Err(VMError::PermissionDenied(min_permissions));
-        }
-
-        self.map(vpn, area_id, None)
+        self.map(VPN::from_va(va), min_permissions)
     }
 }
 
@@ -529,6 +490,10 @@ impl VMArea {
             pages: Vec::new(),
         }
     }
+
+    fn contain_vpn(&self, vpn: VPN) -> bool {
+        self.start_vpn <= vpn && vpn < self.end_vpn
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -546,12 +511,9 @@ pub(crate) enum VMError {
     CreateRootPgtFailed(PgtError),
     PgtError(VPN, PgtError),
     NoAreaContainVpn(VPN),
-    VpnNotBelongArea(VPN, usize),
-    InvalidAreaId(usize),
     InvalidPermissions(usize),
-    PermissionDenied(usize),
+    PermissionDenied(VPN, usize),
     ElfError(&'static str),
-    DataExceedPage(VPN),
     AlignDataFailed(usize),
     AcquirePageFailed,
 }
