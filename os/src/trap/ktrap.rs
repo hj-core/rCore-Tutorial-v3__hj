@@ -7,17 +7,16 @@ use crate::mm::prelude::{
     PERMISSION_R, PERMISSION_U, PERMISSION_W, get_uaccess_fix, is_load_user_fault,
     is_store_user_fault,
 };
-use crate::trap::{TrapContext, do_page_fault};
-use crate::{log, warn};
+use crate::trap::{TrapContext, do_page_fault, log_do_page_fault_failed, trap_panic};
 
 #[unsafe(no_mangle)]
 fn k_trap_handler(context: &mut TrapContext) {
-    let scause_val = scause::read();
-    let cause = scause::match_cause(scause_val);
+    let scause = scause::read();
     let sepc = sepc::read();
-    let stval_val = stval::read();
+    let stval = stval::read();
     let saved_tp = context.x[4];
 
+    let cause = scause::match_cause(scause);
     match cause {
         Cause::LoadPageFault if saved_tp != 0 && is_load_user_fault(sepc) => {
             // SAFETY:
@@ -25,11 +24,9 @@ fn k_trap_handler(context: &mut TrapContext) {
             // [TrapContext] of the running task on this hart.
             let task_id = unsafe { TrapContext::get_task_id_from_ptr(saved_tp as *const _) };
 
-            if let Err(err) = do_page_fault(task_id, stval_val, PERMISSION_U | PERMISSION_R) {
-                warn!(
-                    "Task {:}: Mapping the faulted page from uaccess failed with {:?}.",
-                    task_id, err
-                );
+            let min_permissions = PERMISSION_U | PERMISSION_R;
+            if let Err(err) = do_page_fault(task_id, stval, min_permissions) {
+                log_do_page_fault_failed(task_id, stval, min_permissions, err);
                 context.sepc = get_uaccess_fix();
             }
         }
@@ -40,19 +37,13 @@ fn k_trap_handler(context: &mut TrapContext) {
             // [TrapContext] of the running task on this hart.
             let task_id = unsafe { TrapContext::get_task_id_from_ptr(saved_tp as *const _) };
 
-            if let Err(err) = do_page_fault(task_id, stval_val, PERMISSION_U | PERMISSION_W) {
-                warn!(
-                    "Task {:}: Mapping the faulted page from uaccess failed with {:?}.",
-                    task_id, err
-                );
+            let min_permissions = PERMISSION_U | PERMISSION_W;
+            if let Err(err) = do_page_fault(task_id, stval, min_permissions) {
+                log_do_page_fault_failed(task_id, stval, min_permissions, err);
                 context.sepc = get_uaccess_fix();
             }
         }
 
-        _ => {
-            panic!(
-                "Kernel trapped by {cause:?}, sepc={sepc:#x}, scause={scause_val:#x}, stval={stval_val:#x}"
-            )
-        }
+        _ => trap_panic(0, cause, scause, stval, sepc, context),
     }
 }
