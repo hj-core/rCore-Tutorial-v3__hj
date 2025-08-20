@@ -28,7 +28,7 @@ pub fn syscall_handler(syscall_id: usize, args: [usize; 3]) -> isize {
 fn log_failed_copy_from(src: *const u8, len: usize, failed_len: usize) {
     warn!(
         "Task {:?}: Failed to copy from user, src={:#x}, len={}, failed_len={}",
-        get_current_task_id().expect("Expect a running task"),
+        get_current_task_id(),
         src.addr(),
         len,
         failed_len,
@@ -38,7 +38,7 @@ fn log_failed_copy_from(src: *const u8, len: usize, failed_len: usize) {
 fn log_failed_copy_to(dst: *mut u8, len: usize, failed_len: usize) {
     warn!(
         "Task {:?}: Failed to copy to user, dst={:#x}, len={}, failed_len={}",
-        get_current_task_id().expect("Expect a running task"),
+        get_current_task_id(),
         dst.addr(),
         len,
         failed_len,

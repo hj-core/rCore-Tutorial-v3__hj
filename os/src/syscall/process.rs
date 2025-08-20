@@ -8,7 +8,7 @@ use crate::{info, log};
 use crate::syscall::log_failed_copy_to;
 
 pub(super) fn sys_exit(exit_code: isize) -> isize {
-    let task_id = get_current_task_id().expect("sys_exit when no task is running");
+    let task_id = get_current_task_id();
 
     let state = exchange_current_task_state(TaskState::Running, TaskState::Exited);
     if let Err(state) = state {
@@ -21,7 +21,7 @@ pub(super) fn sys_exit(exit_code: isize) -> isize {
 }
 
 pub(super) fn sys_yield() -> isize {
-    let task_id = get_current_task_id().expect("sys_yield when no task is running");
+    let task_id = get_current_task_id();
 
     let state = exchange_current_task_state(TaskState::Running, TaskState::Ready);
     if let Err(state) = state {

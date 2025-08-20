@@ -14,7 +14,7 @@ pub(super) fn sys_write(fd: usize, buf: *const u8, count: usize) -> isize {
     if fd != FD_STDOUT {
         warn!(
             "Task {:?}: Unsupported file descriptor {}",
-            get_current_task_id().expect("Expect a running task"),
+            get_current_task_id(),
             fd
         );
         return -1;

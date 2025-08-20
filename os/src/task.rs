@@ -66,7 +66,7 @@ pub(crate) fn run_next_task() {
     let mut all_tasks = ALL_TASKS.lock();
 
     let mut curr_context = null_mut();
-    if let Some(task_id) = get_current_task_id()
+    if let Some(task_id) = try_get_current_task_id()
         && let Some(mut tcb) = take_task_tcb(&mut all_tasks, task_id)
     {
         curr_context = tcb.get_context_mut() as *mut TaskContext;
@@ -113,19 +113,30 @@ fn get_next_task_id(tasks: &Vec<TaskControlBlock>) -> Option<usize> {
         .map(|i| tasks[i].get_task_id())
 }
 
-/// Returns the task ID of the current task based
-/// on the current thread pointer, i.e., tp.
-pub(crate) fn get_current_task_id() -> Option<usize> {
+/// Returns the task ID of the current task based on
+/// the current thread pointer, i.e., tp.
+///
+/// # Panic
+/// This function panics if no task is running.
+pub(crate) fn get_current_task_id() -> usize {
+    try_get_current_task_id().expect("This hart is not running a task.")
+}
+
+/// Returns the task ID of the current task based on
+/// the current thread pointer, i.e., tp., or [None]
+/// if no task is running.
+fn try_get_current_task_id() -> Option<usize> {
     let mut tp: usize;
     unsafe { asm!("mv {}, tp", out(reg) tp) };
 
     if tp == 0 {
         return None;
     }
-    let task_id = unsafe { (tp as *const TrapContext).as_ref() }
+
+    let result = unsafe { (tp as *const TrapContext).as_ref() }
         .unwrap()
         .get_task_id();
-    Some(task_id)
+    Some(result)
 }
 
 /// Takes the [TaskControlBlock] with `task_id` from
@@ -165,7 +176,7 @@ pub(crate) fn exchange_current_task_state(
     expected: TaskState,
     new: TaskState,
 ) -> Result<TaskState, TaskState> {
-    let task_id = get_current_task_id().expect("No current task running in this thread.");
+    let task_id = get_current_task_id();
 
     let mut all_tasks = ALL_TASKS.lock();
     let tcb = all_tasks
@@ -189,7 +200,7 @@ pub(crate) fn exchange_current_task_state(
 /// This function panics if the thread is not running
 /// a task.
 pub(crate) fn record_current_run_end() {
-    let task_id = get_current_task_id().expect("No current task running in this thread.");
+    let task_id = get_current_task_id();
 
     let mut all_tasks = ALL_TASKS.lock();
     let tcb = all_tasks
@@ -209,7 +220,7 @@ pub(crate) fn record_current_run_end() {
 ///
 /// [MAX_SYSCALLS_TRACKED]: control::MAX_SYSCALLS_TRACKED
 pub(crate) fn record_current_syscall(syscall_id: usize) -> bool {
-    let task_id = get_current_task_id().expect("No current task running in this thread.");
+    let task_id = get_current_task_id();
 
     let mut all_tasks = ALL_TASKS.lock();
     let tcb = all_tasks

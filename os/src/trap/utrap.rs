@@ -16,8 +16,7 @@ const EXPECT_RUNNING_TASK_STATE: &str = "Expected the current TaskState to be Ru
 
 #[unsafe(no_mangle)]
 fn u_trap_handler(context: &mut TrapContext) -> &mut TrapContext {
-    let task_id = get_current_task_id()
-        .expect("Expect the hart is running a task when entering u_trap_handler.");
+    let task_id = get_current_task_id();
     let scause = scause::read();
     let sepc = sepc::read();
     let stval = stval::read();
