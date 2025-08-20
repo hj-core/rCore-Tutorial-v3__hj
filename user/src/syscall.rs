@@ -3,6 +3,7 @@ use core::arch::asm;
 use crate::task::TaskInfo;
 
 const SYSCALL_WRITE: usize = 64;
+const SYSCALL_MMAP: usize = 90;
 const SYSCALL_EXIT: usize = 93;
 const SYSCALL_YIELD: usize = 124;
 const SYSCALL_TASK_INFO: usize = (1 << 63) | 1;
@@ -35,4 +36,8 @@ pub(super) fn sys_yield() -> isize {
 
 pub(super) fn sys_task_info(task_id: usize, data: *mut TaskInfo) -> isize {
     syscall(SYSCALL_TASK_INFO, [task_id, data.addr(), 0])
+}
+
+pub(super) fn sys_mmap(addr: usize, len: usize, prot: usize) -> isize {
+    syscall(SYSCALL_MMAP, [addr, len, prot])
 }

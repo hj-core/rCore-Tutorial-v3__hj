@@ -5,8 +5,8 @@ mod lang_items;
 mod syscall;
 pub mod task;
 
-use syscall::{sys_exit, sys_task_info, sys_write, sys_yield};
-use task::TaskInfo;
+use crate::syscall::{sys_exit, sys_mmap, sys_task_info, sys_write, sys_yield};
+use crate::task::TaskInfo;
 
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".text.entry")]
@@ -44,4 +44,8 @@ pub fn yield_now() -> isize {
 
 pub fn get_task_info(task_id: usize, data: *mut TaskInfo) -> isize {
     sys_task_info(task_id, data)
+}
+
+pub fn mmap(addr: usize, len: usize, prot: usize) -> isize {
+    sys_mmap(addr, len, prot)
 }
