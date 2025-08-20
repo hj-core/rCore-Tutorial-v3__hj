@@ -145,13 +145,28 @@ pub(crate) fn do_page_fault(
     stval: usize,
     min_permissions: usize,
 ) -> Result<(), VMError> {
+    let mut result = Ok(());
+    update_tcb(task_id, |tcb| {
+        result = tcb
+            .get_vm_space_mut()
+            .map_fault_page(stval, min_permissions);
+    });
+    result
+}
+
+/// Updates the [TaskControlBlock] associated with `task_id`
+/// by applying the function `f`.
+///
+/// # Panic
+/// This function panics if no matching [TaskControlBlock]
+/// can be found.
+fn update_tcb(task_id: usize, f: impl FnOnce(&mut TaskControlBlock)) {
     ALL_TASKS
         .lock()
         .iter_mut()
         .find(|tcb| tcb.get_task_id() == task_id)
-        .expect("Cannot find a task with the task_id")
-        .get_vm_space_mut()
-        .map_fault_page(stval, min_permissions)
+        .map(f)
+        .expect("Cannot find a task with the task_id");
 }
 
 /// Changes the state of the current task to `new` if
