@@ -9,7 +9,7 @@ pub(super) const MAX_SYSCALLS_TRACKED: usize = 6;
 
 #[allow(dead_code)]
 #[derive(Debug)]
-pub(super) struct TaskControlBlock {
+pub(crate) struct TaskControlBlock {
     task_id: usize,
     vm_space: VMSpace,
     state: TaskState,
@@ -38,7 +38,7 @@ impl TaskControlBlock {
         self.task_id
     }
 
-    pub(super) fn get_vm_space_mut(&mut self) -> &mut VMSpace {
+    pub(crate) fn get_vm_space_mut(&mut self) -> &mut VMSpace {
         &mut self.vm_space
     }
 

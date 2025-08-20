@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 use core::arch::{asm, global_asm};
 use core::ptr::null_mut;
 
-use crate::mm::prelude::{VMError, VMSpace};
+use crate::mm::prelude::VMSpace;
 use crate::sbi::shutdown;
 use crate::sync::spin::SpinLock;
 use crate::timer;
@@ -138,29 +138,13 @@ fn take_task_tcb(tasks: &mut Vec<TaskControlBlock>, task_id: usize) -> Option<Ta
     Some(tasks.swap_remove(rand_index))
 }
 
-/// Tries to fix the page fault for the task by mapping
-/// the page containing address `stval` into its [VMSpace].
-pub(crate) fn do_page_fault(
-    task_id: usize,
-    stval: usize,
-    min_permissions: usize,
-) -> Result<(), VMError> {
-    let mut result = Ok(());
-    update_tcb(task_id, |tcb| {
-        result = tcb
-            .get_vm_space_mut()
-            .map_fault_page(stval, min_permissions);
-    });
-    result
-}
-
 /// Updates the [TaskControlBlock] associated with `task_id`
 /// by applying the function `f`.
 ///
 /// # Panic
 /// This function panics if no matching [TaskControlBlock]
 /// can be found.
-fn update_tcb(task_id: usize, f: impl FnOnce(&mut TaskControlBlock)) {
+pub(crate) fn update_tcb(task_id: usize, f: impl FnOnce(&mut TaskControlBlock)) {
     ALL_TASKS
         .lock()
         .iter_mut()

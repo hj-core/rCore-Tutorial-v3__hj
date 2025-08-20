@@ -6,13 +6,13 @@ use riscv::regs::{
 };
 
 use crate::mm::prelude::{
-    PERMISSION_R, PERMISSION_U, PERMISSION_W, check_u_va, get_uaccess_fix, is_load_user_fault,
-    is_store_user_fault,
+    PERMISSION_R, PERMISSION_U, PERMISSION_W, VMError, check_u_va, get_uaccess_fix,
+    is_load_user_fault, is_store_user_fault,
 };
 use crate::syscall;
 use crate::task::prelude::{
-    TaskState, do_page_fault, exchange_current_task_state, get_current_task_id,
-    record_current_run_end, record_current_syscall, run_next_task,
+    TaskState, exchange_current_task_state, get_current_task_id, record_current_run_end,
+    record_current_syscall, run_next_task, update_tcb,
 };
 use crate::{info, log, warn};
 
@@ -96,6 +96,22 @@ fn k_trap_handler(context: &mut TrapContext) {
             )
         }
     }
+}
+
+/// Tries to fix the page fault for the task by mapping the
+/// page containing address `stval` into its [VMSpace].
+pub(crate) fn do_page_fault(
+    task_id: usize,
+    stval: usize,
+    min_permissions: usize,
+) -> Result<(), VMError> {
+    let mut result = Ok(());
+    update_tcb(task_id, |tcb| {
+        result = tcb
+            .get_vm_space_mut()
+            .map_fault_page(stval, min_permissions);
+    });
+    result
 }
 
 #[unsafe(no_mangle)]
