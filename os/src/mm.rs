@@ -42,7 +42,7 @@ const MEM_START_PA: usize = 0x8000_0000;
 const MEM_SIZE_BYTES: usize = 128 << 20; // 128 MiB
 
 const PAGE_SIZE_ORDER: usize = 12;
-const PAGE_SIZE_BYTES: usize = 1 << PAGE_SIZE_ORDER; // 4 KiB
+pub(crate) const PAGE_SIZE_BYTES: usize = 1 << PAGE_SIZE_ORDER; // 4 KiB
 const LARGE_PAGE_SIZE_ORDER: usize = 21;
 const LARGE_PAGE_SIZE_BYTES: usize = 1 << LARGE_PAGE_SIZE_ORDER; // 2 MiB
 

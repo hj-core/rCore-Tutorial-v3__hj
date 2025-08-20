@@ -467,6 +467,36 @@ impl VMSpace {
     ) -> Result<(), VMError> {
         self.map(VPN::from_va(va), min_permissions)
     }
+
+    /// Adds a new [VMArea] according to the given properties,
+    /// or returns the corresponding [VMError].
+    pub(crate) fn add_new_area(
+        &mut self,
+        start_vpn: VPN,
+        end_vpn: VPN,
+        map_type: MapType,
+        permissions: usize,
+    ) -> Result<(), VMError> {
+        if end_vpn <= start_vpn {
+            return Err(VMError::EmptyArea(start_vpn, end_vpn));
+        }
+
+        if permissions & !ALL_PERMISSION_FLAGS != 0 {
+            return Err(VMError::InvalidPermissions(permissions));
+        }
+
+        if self
+            .areas
+            .iter()
+            .all(|area| area.end_vpn <= start_vpn || end_vpn <= area.start_vpn)
+        {
+            let area = VMArea::new(start_vpn, end_vpn, map_type, permissions);
+            self.areas.push(area);
+            Ok(())
+        } else {
+            Err(VMError::AreaOverlapping(start_vpn, end_vpn))
+        }
+    }
 }
 
 /// An abstraction over a range of virtual memory.
@@ -497,7 +527,7 @@ impl VMArea {
 }
 
 #[derive(Debug, Copy, Clone)]
-enum MapType {
+pub(crate) enum MapType {
     /// Maps the [VPN] to a newly allocated [PPN].
     Anonymous,
     /// Maps the [VPN] to the [PPN] located [KERNEL_VA_OFFSET]
@@ -509,11 +539,21 @@ enum MapType {
 #[derive(Debug)]
 pub(crate) enum VMError {
     CreateRootPgtFailed(PgtError),
+    /// (requested VPN, reported PgtError).
     PgtError(VPN, PgtError),
+    /// (requested VPN).
     NoAreaContainVpn(VPN),
+    /// (requested permissions).
     InvalidPermissions(usize),
+    /// (request VPN, requested permissions).
     PermissionDenied(VPN, usize),
+    /// (error message).
     ElfError(&'static str),
+    /// (requested alignment).
     AlignDataFailed(usize),
     AcquirePageFailed,
+    /// (start_vpn, end_vpn).
+    AreaOverlapping(VPN, VPN),
+    /// (start_vpn, end_vpn).
+    EmptyArea(VPN, VPN),
 }
