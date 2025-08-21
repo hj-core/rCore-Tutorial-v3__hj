@@ -1,5 +1,6 @@
 extern crate alloc;
 
+use alloc::collections::btree_map::BTreeMap;
 use alloc::vec::Vec;
 use core::arch::asm;
 use core::sync::atomic::{AtomicUsize, Ordering};
@@ -300,7 +301,7 @@ impl VMSpace {
             self.root_pgt
                 .map_create(vpn, ppn, pte_flags)
                 .map_err(|pgt_err| VMError::PgtError(vpn, pgt_err))?;
-            area.pages.push(page)
+            area.pages.insert(vpn, page);
         }
 
         self.areas.push(area);
@@ -376,7 +377,7 @@ impl VMSpace {
         let end_vpn = VPN::from_va(USER_SPACE_END);
         let start_vpn = VPN::from_va(USER_SPACE_END - USER_STACK_MAX_SIZE_BYTES);
         let mut area = VMArea::new(start_vpn, end_vpn, MapType::Anonymous, permissions);
-        area.pages.push(page);
+        area.pages.insert(vpn, page);
         self.areas.push(area);
 
         self.u_stack_end = USER_SPACE_END;
@@ -393,7 +394,7 @@ impl VMSpace {
         let end_vpn = VPN::from_va(pa + KERNEL_VA_OFFSET + PAGE_SIZE_BYTES);
         let permissions = PERMISSION_R | PERMISSION_W;
         let mut area = VMArea::new(start_vpn, end_vpn, MapType::KernelVaOffset, permissions);
-        area.pages.push(page);
+        area.pages.insert(start_vpn, page);
         self.areas.push(area);
 
         self.k_stack_end = end_vpn.get_va();
@@ -432,7 +433,7 @@ impl VMSpace {
 
         let page = alloc_zeroed_page().ok_or(VMError::AcquirePageFailed)?;
         let ppn = page.get_ppn();
-        area.pages.push(page);
+        area.pages.insert(vpn, page);
 
         let pte_flags = to_pte_flags(area.permissions)?;
         let result = self
@@ -442,7 +443,7 @@ impl VMSpace {
 
         if result.is_err() {
             let area = self.find_area_mut(vpn).unwrap();
-            area.pages.pop();
+            area.pages.remove(&vpn);
         }
 
         result
@@ -507,7 +508,7 @@ struct VMArea {
     end_vpn: VPN,
     map_type: MapType,
     permissions: usize,
-    pages: Vec<Page>,
+    pages: BTreeMap<VPN, Page>,
 }
 
 impl VMArea {
@@ -517,7 +518,7 @@ impl VMArea {
             end_vpn,
             map_type,
             permissions,
-            pages: Vec::new(),
+            pages: BTreeMap::new(),
         }
     }
 
