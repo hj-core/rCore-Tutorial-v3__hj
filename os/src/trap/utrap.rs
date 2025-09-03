@@ -59,12 +59,13 @@ fn u_trap_handler(context: &mut TrapContext) -> &mut TrapContext {
             }
         }
 
-        Cause::IllegalInstruction => {
+        Cause::IllegalInstruction | Cause::InstructionPageFault => {
             kill_task();
             log_task_killed(task_id, cause, stval, sepc);
             run_next_task();
         }
 
+        // Unexpected causes
         _ => trap_panic(task_id, cause, scause, stval, sepc, context),
     }
 

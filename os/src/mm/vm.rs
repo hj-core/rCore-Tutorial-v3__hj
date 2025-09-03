@@ -498,6 +498,74 @@ impl VMSpace {
             Err(VMError::AreaOverlapping(start_vpn, end_vpn))
         }
     }
+
+    /// Unmaps any existing mappings within range [start_vpn]
+    /// to [end_vpn] (exclusive).
+    pub(crate) fn unmap(&mut self, start_vpn: VPN, end_vpn: VPN) -> Result<(), VMError> {
+        for i in (0..self.areas.len()).rev() {
+            let area = &mut self.areas[i];
+
+            let no_overlap = area.end_vpn <= start_vpn || end_vpn <= area.start_vpn;
+            if no_overlap {
+                continue;
+            }
+
+            if start_vpn <= area.start_vpn && area.end_vpn <= end_vpn {
+                // Overlap case 1:
+                // to unmap   : [xxxxxxxxxxxxxxxx)
+                // area       :    [----------)
+                // aear_after :
+                self.root_pgt
+                    .unmap(area.start_vpn, area.end_vpn)
+                    .map_err(|pgt_err| VMError::PgtError(area.start_vpn, pgt_err))?;
+
+                self.areas.swap_remove(i);
+            } else if start_vpn <= area.start_vpn {
+                // Overlap Case 2:
+                // to unmap   : [xxxxxxxxxxxxxxx)
+                // area       :     [----------------)
+                // area_after :                 [----)
+                self.root_pgt
+                    .unmap(area.start_vpn, end_vpn)
+                    .map_err(|pgt_err| VMError::PgtError(area.start_vpn, pgt_err))?;
+
+                area.start_vpn = end_vpn;
+                area.pages = area.pages.split_off(&end_vpn);
+            } else if area.end_vpn <= end_vpn {
+                // Overlap Case 3:
+                // to unmap   :       [xxxxxxxxxxxxxxx)
+                // area       : [----------------)
+                // area_after : [-----)
+                self.root_pgt
+                    .unmap(start_vpn, area.end_vpn)
+                    .map_err(|pgt_err| VMError::PgtError(area.start_vpn, pgt_err))?;
+
+                area.end_vpn = start_vpn;
+                area.pages.split_off(&start_vpn);
+            } else {
+                // Overlap Case 4:
+                // to unmap   :      [xxxxxxxxx)
+                // area       : [------------------)
+                // area_after : [----)         [---)
+                self.root_pgt
+                    .unmap(start_vpn, end_vpn)
+                    .map_err(|pgt_err| VMError::PgtError(area.start_vpn, pgt_err))?;
+
+                let pages = area.pages.split_off(&start_vpn).split_off(&end_vpn);
+                let new_area = VMArea {
+                    start_vpn: end_vpn,
+                    end_vpn: area.end_vpn,
+                    map_type: area.map_type,
+                    permissions: area.permissions,
+                    pages,
+                };
+                area.end_vpn = start_vpn;
+                self.areas.push(new_area);
+            }
+        }
+
+        Ok(())
+    }
 }
 
 /// An abstraction over a range of virtual memory.

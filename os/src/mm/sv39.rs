@@ -192,6 +192,63 @@ impl RootPgt {
 
         Ok(())
     }
+
+    /// Unmaps any existing mappings within range [start_vpn]
+    /// to [end_vpn] (exclusive) from the page tables.
+    ///
+    /// # Panic
+    /// This function expects page level mapping only. It panics
+    /// if a huge page mapping or large page mapping is encountered.
+    pub(crate) fn unmap(&mut self, start_vpn: VPN, end_vpn: VPN) -> Result<(), PgtError> {
+        if end_vpn <= start_vpn {
+            return Ok(());
+        }
+
+        let mut parsed_vpn = parse_vpn(start_vpn);
+
+        let table2 = unsafe { Self::get_ptes_mut(self.ppn) };
+        for vpn2 in parsed_vpn[2]..PTES_PER_TABLE {
+            let pte2 = table2[vpn2];
+
+            if !pte2.is_valid() {
+                parsed_vpn[1] = 0;
+                parsed_vpn[0] = 0;
+                continue;
+            }
+            assert!(
+                !pte2.is_leaf(),
+                "Unmap huge page is unexpected: vpn2={vpn2}, pte={pte2:?}."
+            );
+
+            let table1 = unsafe { Self::get_ptes_mut(pte2.get_ppn()) };
+            for vpn1 in parsed_vpn[1]..PTES_PER_TABLE {
+                let pte1 = table1[vpn1];
+
+                if !pte1.is_valid() {
+                    parsed_vpn[0] = 0;
+                    continue;
+                }
+                assert!(
+                    !pte1.is_leaf(),
+                    "Unmap large page is unexpected: vpn2={vpn2}, vpn1={vpn1}, pte={pte1:?}."
+                );
+
+                let table0 = unsafe { Self::get_ptes_mut(pte1.get_ppn()) };
+                for vpn0 in parsed_vpn[0]..PTES_PER_TABLE {
+                    let vpn = VPN((vpn2 << 18) + (vpn1 << 9) + vpn0);
+                    if end_vpn <= vpn {
+                        return Ok(());
+                    }
+
+                    table0[vpn0] = PTE(0);
+                }
+                parsed_vpn[0] = 0;
+            }
+            parsed_vpn[1] = 0;
+        }
+
+        panic!("Code should not reach here.")
+    }
 }
 
 // Page Table Entry

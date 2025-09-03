@@ -1,3 +1,5 @@
+use core::arch::asm;
+
 use crate::mm::prelude::{
     MapType, PAGE_SIZE_BYTES, PERMISSION_R, PERMISSION_U, PERMISSION_W, PERMISSION_X, VPN,
     check_u_va_range,
@@ -32,11 +34,7 @@ pub(super) fn mmap(addr: usize, len: usize, prot: usize) -> isize {
             .add_new_area(start_vpn, end_vpn, map_type, permissions);
     });
 
-    if result.is_ok() {
-        return 0;
-    } else {
-        return -1;
-    }
+    if result.is_ok() { 0 } else { -1 }
 }
 
 fn to_permissions(prot: usize) -> usize {
@@ -51,4 +49,27 @@ fn to_permissions(prot: usize) -> usize {
         result |= PERMISSION_X;
     }
     result
+}
+
+/// Unmaps the existing [VPN]s containing the virtual
+/// addresses from addr to addr+len(exclusive).
+pub(super) fn munmap(addr: usize, len: usize) -> isize {
+    if !check_u_va_range(addr, len) {
+        return -1;
+    }
+    if len == 0 {
+        return 0;
+    }
+
+    let task_id = get_current_task_id();
+    let mut result = Ok(());
+
+    update_tcb(task_id, |tcb| {
+        let start_vpn = VPN::from_va(addr);
+        let end_vpn = VPN::from_va(addr + len + PAGE_SIZE_BYTES - 1);
+        result = tcb.get_vm_space_mut().unmap(start_vpn, end_vpn);
+    });
+
+    unsafe { asm!("sfence.vma") };
+    if result.is_ok() { 0 } else { -1 }
 }

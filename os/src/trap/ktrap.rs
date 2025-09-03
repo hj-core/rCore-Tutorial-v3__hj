@@ -44,6 +44,7 @@ fn k_trap_handler(context: &mut TrapContext) {
             }
         }
 
+        // Unexpected causes
         _ => trap_panic(0, cause, scause, stval, sepc, context),
     }
 }
