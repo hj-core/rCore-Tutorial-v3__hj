@@ -62,6 +62,13 @@ fn get_elf_end(app_index: usize) -> usize {
     unsafe { get_meta_start().add(app_index * APP_META_ITEMS + 4).read() as usize }
 }
 
+/// Returns the app's ELF bytes.
+pub(super) fn get_app_elf_by_name<'a>(app_name: &str) -> &'a [u8] {
+    (0..get_total_apps())
+        .find(|i| get_app_name(*i) == app_name)
+        .map_or(&[], get_app_elf)
+}
+
 pub(crate) fn log_app_elfs() {
     let total_apps = get_total_apps();
 

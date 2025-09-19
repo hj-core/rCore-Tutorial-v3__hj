@@ -15,7 +15,7 @@ use crate::timer;
 use crate::trap::{self, TrapContext};
 use crate::{debug, info, log};
 
-use crate::task::apps::{get_app_elf, get_total_apps};
+use crate::task::apps::{get_app_elf, get_app_elf_by_name, get_total_apps};
 use crate::task::state::{TaskContext, TaskControlBlock, TaskState, TaskStatistics};
 
 // The design should be revisited if the environment
@@ -29,9 +29,11 @@ unsafe extern "C" {
 }
 
 pub(super) fn start() -> ! {
-    for i in 0..get_total_apps() {
+    add_task(get_app_elf_by_name("00_helloworld"));
+    for i in 1..get_total_apps() {
         add_task(get_app_elf(i));
     }
+
     run_next_task();
     unreachable!()
 }
